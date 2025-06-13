@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import Sidebar from '../components/Sidebar';
+import MapPanel from '../components/MapPanel';
+import ResponseCard from '../components/ResponseCard';
+
 
 const mapContainerStyle = {
   width: '100%',
@@ -41,8 +45,6 @@ export default function PlaceMemoryV5() {
     const lng = e.latLng.lng();
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-    console.log("📍 Google Maps API Key:", apiKey);
-
     const geoRes = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
     );
@@ -65,10 +67,8 @@ export default function PlaceMemoryV5() {
       const elevData = await elevRes.json();
       elevation = elevData.elevation || 0;
       terrain = classifyTerrain(elevation);
-
-      console.log("📏 Elevation data (via API route):", elevData);
     } catch (error) {
-      console.error("🧨 Failed to fetch elevation via server route:", error);
+      console.error("Elevation fetch failed:", error);
     }
 
     const place = {
@@ -115,53 +115,24 @@ export default function PlaceMemoryV5() {
   };
 
   return (
-    <div style={{ display: 'flex' }}>
-      <div style={{ width: '25%', padding: '1rem', borderRight: '1px solid #ddd' }}>
-        <h3>Intent</h3>
-        <textarea
-          rows={3}
-          value={intent}
-          onChange={(e) => setIntent(e.target.value)}
-          placeholder="e.g. Find forested areas near water for a hiking route..."
-          style={{ width: '100%', fontSize: '0.9rem', marginBottom: '1rem' }}
-        />
+    <div className="flex h-screen">
+      {/* Left Sidebar */}
+      <Sidebar
+  intent={intent}
+  setIntent={setIntent}
+  clickedPlaces={clickedPlaces}
+  onAnalyze={analyzePlaces}
+  onClear={clearMemory}
+/>
 
-        <h3>Memory</h3>
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {clickedPlaces.map((p, i) => (
-            <li key={i} style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-              📍 {p.description} ({p.terrain}, {p.elevation}m)
-            </li>
-          ))}
-        </ul>
+      {/* Map + Response Panel */}
+      <div className="w-[75%] p-4 space-y-4 overflow-y-auto">
+     <MapPanel
+  clickedPlaces={clickedPlaces}
+  handleMapClick={handleMapClick}
+/>
 
-        <button onClick={analyzePlaces} style={{ marginTop: '1rem', marginRight: '0.5rem' }}>
-          Analyze Exploration
-        </button>
-        <button onClick={clearMemory} style={{ marginTop: '1rem', backgroundColor: '#ccc' }}>
-          Clear Memory
-        </button>
-      </div>
-
-      <div style={{ flex: 1, padding: '1rem' }}>
-        <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}>
-          <GoogleMap
-            mapContainerStyle={mapContainerStyle}
-            center={center}
-            zoom={7}
-            onClick={handleMapClick}
-          >
-            {clickedPlaces.map((place, index) => (
-              <Marker key={index} position={{ lat: place.lat, lng: place.lng }} />
-            ))}
-          </GoogleMap>
-        </LoadScript>
-
-        {response && (
-          <div style={{ marginTop: '1rem', whiteSpace: 'pre-line', background: '#f7f7f7', padding: '1rem', borderRadius: '6px' }}>
-            {response}
-          </div>
-        )}
+        <ResponseCard response={response} />
       </div>
     </div>
   );
