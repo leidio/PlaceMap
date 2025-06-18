@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import Sidebar from '../components/Sidebar';
 import MapPanel from '../components/MapPanel';
@@ -9,7 +9,7 @@ import LoadingBar from '../components/LoadingBar';
 import FollowUpInput from '../components/FollowUpInput';
 import RecentSessions from '../components/RecentSessions';
 
-
+const googleMapsLibraries = ['drawing', 'geometry'];
 
 const mapContainerStyle = {
   width: '100%',
@@ -41,6 +41,11 @@ function haversineDistance(coord1, coord2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Generate unique ID for sessions
+function generateSessionId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
 //PRIMARY FUNCTION
 export default function PlaceMemoryV5() {
   const [clickedPlaces, setClickedPlaces] = useState([]);
@@ -53,186 +58,268 @@ export default function PlaceMemoryV5() {
   const [pastSessions, setPastSessions] = useState([]);
   const [response, setResponse] = useState('');
   const [inputMode, setInputMode] = useState('click'); // 'click' or 'draw'
+  const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session
 
-//CLEAR MEMORY
-const clearMemory = () => {
-  if (intent && conversationHistory.length > 0) {
-    const newSession = {
+  // Load sessions from localStorage on component mount
+  useEffect(() => {
+    const savedSessions = localStorage.getItem('pastSessions');
+    if (savedSessions) {
+      try {
+        setPastSessions(JSON.parse(savedSessions));
+      } catch (error) {
+        console.error('Error loading sessions:', error);
+      }
+    }
+  }, []);
+
+  // Save sessions to localStorage whenever pastSessions changes
+  useEffect(() => {
+    localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
+  }, [pastSessions]);
+
+  // Create or update session
+  const createOrUpdateSession = () => {
+    if (!intent || conversationHistory.length === 0) return;
+
+    const sessionData = {
+      id: currentSessionId || generateSessionId(),
       intent,
-      conversationHistory,
-      clickedPlaces, // ← ✅ store placemarks here
+      conversationHistory: [...conversationHistory],
+      clickedPlaces: [...clickedPlaces],
+      timestamp: Date.now()
     };
 
-    // Avoid adding duplicate sessions
-    const isDuplicate = pastSessions.some(
-      (s) =>
-        s.intent === newSession.intent &&
-        JSON.stringify(s.conversationHistory) === JSON.stringify(newSession.conversationHistory)
-    );
+    setPastSessions(prev => {
+      // Check if we're updating an existing session
+      if (currentSessionId) {
+        const existingIndex = prev.findIndex(s => s.id === currentSessionId);
+        if (existingIndex !== -1) {
+          // Update existing session
+          const updated = [...prev];
+          updated[existingIndex] = sessionData;
+          return updated;
+        }
+      }
+      
+      // Create new session (avoid duplicates)
+      const isDuplicate = prev.some(s => 
+        s.intent === sessionData.intent &&
+        JSON.stringify(s.conversationHistory) === JSON.stringify(sessionData.conversationHistory)
+      );
+      
+      if (!isDuplicate) {
+        return [...prev, sessionData];
+      }
+      
+      return prev;
+    });
 
-    if (!isDuplicate) {
-      setPastSessions((prev) => [...prev, newSession]);
+    // Set current session ID if it's a new session
+    if (!currentSessionId) {
+      setCurrentSessionId(sessionData.id);
     }
-  }
+  };
 
-  setClickedPlaces([]);
-  setResponse('');
-  setConversationHistory([]);
-  setIntent('');
-};
+  //CLEAR MEMORY
+  const clearMemory = () => {
+    // Save current session before clearing
+    createOrUpdateSession();
 
-//RESUME SESSION
-const resumeSession = (session) => {
-  setIntent(session.intent);
-  setConversationHistory(session.conversationHistory);
-  setClickedPlaces(session.clickedPlaces || []);
-  setShowIntentInput(false);
-};
+    // Reset all state
+    setClickedPlaces([]);
+    setResponse('');
+    setConversationHistory([]);
+    setIntent('');
+    setCurrentSessionId(null);
+  };
 
+  //RESUME SESSION
+  const resumeSession = (session) => {
+    setIntent(session.intent);
+    setConversationHistory(session.conversationHistory);
+    setClickedPlaces(session.clickedPlaces || []);
+    setCurrentSessionId(session.id);
+    setShowIntentInput(false);
+  };
 
-//DELETE POLYGON
-const handleDeleteRegion = (indexToRemove) => {
-  setClickedPlaces((prev) => prev.filter((place, idx) => {
-    const isRegion = place.type === 'region' && idx === indexToRemove;
-    return !isRegion;
-  }));
-};
+  //DELETE SESSION
+  const handleDeleteSession = (idToDelete) => {
+    const confirmed = window.confirm("Are you sure you want to delete this session?");
+    if (!confirmed) return;
 
-//PLACEMARKERS
-const handleMapClick = async (e) => {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
+    setPastSessions(prev => prev.filter(s => s.id !== idToDelete));
+    
+    // If we're deleting the current session, clear current session ID
+    if (currentSessionId === idToDelete) {
+      setCurrentSessionId(null);
+    }
+  };
+
+  //DELETE POLYGON
+  const handleDeleteRegion = (indexToRemove) => {
+    setClickedPlaces((prev) => prev.filter((place, idx) => {
+      const isRegion = place.type === 'region' && idx === indexToRemove;
+      return !isRegion;
+    }));
+  };
+
+  //PLACEMARKERS
+  const handleMapClick = async (e) => {
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    const geoRes = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+    );
+    const geoData = await geoRes.json();
+
+    //NEAREST LOCATLITY AND LAT/LONG
+    let nearestTown = 'Unknown';
+    let townLat = null;
+    let townLng = null;
+
+    for (const result of geoData.results) {
+      const hasLocality = result.types.includes('locality') || result.types.includes('administrative_area_level_2');
+      if (hasLocality) {
+        nearestTown = result.formatted_address;
+        townLat = result.geometry.location.lat;
+        townLng = result.geometry.location.lng;
+        break;
+      }
+    }
+
+    //ID NEARBY FEATURES
+    let nearbyFeature = 'None found';
+
+    for (const result of geoData.results) {
+      const types = result.types || [];
+      const isFeature = types.includes('natural_feature') || types.includes('park') || types.includes('point_of_interest');
+
+      if (isFeature) {
+        nearbyFeature = result.formatted_address;
+        break;
+      }
+    }
+
+    let elevation = 0;
+    let terrain = 'unknown';
+    let landCover = 'unknown';
+
+    const types = geoData.results[0]?.types || [];
+
+    if (types.includes('park')) landCover = 'forest or green space';
+    else if (types.includes('natural_feature')) landCover = 'natural terrain';
+    else if (types.includes('airport') || types.includes('industrial')) landCover = 'developed';
+    else if (types.includes('locality') || types.includes('neighborhood')) landCover = 'urban or residential';
+    else if (types.includes('route')) landCover = 'transport corridor';
+
+    try {
+      const elevRes = await fetch('/api/elevation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng }),
+      });
+
+      if (!elevRes.ok) {
+        throw new Error(`API route error: ${elevRes.status}`);
+      }
+
+      const elevData = await elevRes.json();
+      elevation = elevData.elevation || 0;
+      terrain = classifyTerrain(elevation);
+    } catch (error) {
+      console.error("Elevation fetch failed:", error);
+    }
+
+    //DISTANCE TO NEAREST TOWN
+    let distanceToTown = null;
+    if (townLat && townLng) {
+      distanceToTown = haversineDistance({ lat, lng }, { lat: townLat, lng: townLng });
+    }
+
+    //PLACEMARK FUNCTION
+    const place = {
+      landCover,
+      nearbyFeature,
+      lat,
+      lng,
+      elevation: Math.round(elevation),
+      terrain,
+      timestamp: Date.now(),
+      description: geoData.results[0]?.formatted_address || 'Unknown location',
+      nearestTown,
+      distanceToTown: distanceToTown ? Math.round(distanceToTown) : null,
+    };
+
+    setClickedPlaces((prev) => [...prev, place]);
+  };
+
+  //REGION SELECT
+  const handleRegionSelect = async (coordinates) => {
+    if (!coordinates || coordinates.length === 0) return;
+
+    const lats = coordinates.map(c => c.lat);
+    const lngs = coordinates.map(c => c.lng);
+    const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+
+    let description = 'Unnamed region'; // Better default fallback
+
+    try {
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-      const geoRes = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-          );
-      const geoData = await geoRes.json();
-
-      //NEAREST LOCATLITY AND LAT/LONG
-      let nearestTown = 'Unknown';
-      let townLat = null;
-      let townLng = null;
-
-      for (const result of geoData.results) {
-        const hasLocality = result.types.includes('locality') || result.types.includes('administrative_area_level_2');
-            if (hasLocality) {
-              nearestTown = result.formatted_address;
-              townLat = result.geometry.location.lat;
-              townLng = result.geometry.location.lng;
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
+      );
+      const data = await res.json();
+      
+      if (data.results && data.results.length > 0) {
+        // Try to get the most specific location name
+        const result = data.results[0];
+        description = result.formatted_address || 'Unnamed region';
+        
+        // If formatted_address is too long, try to get a shorter name
+        if (description.length > 50) {
+          // Look for locality, administrative area, or natural feature
+          for (const result of data.results) {
+            const types = result.types || [];
+            if (types.includes('locality') || 
+                types.includes('administrative_area_level_2') || 
+                types.includes('natural_feature') ||
+                types.includes('sublocality')) {
+              description = result.formatted_address;
               break;
             }
           }
-
-      //ID NEARBY FEATURES
-      let nearbyFeature = 'None found';
-
-      for (const result of geoData.results) {
-        const types = result.types || [];
-        const isFeature = types.includes('natural_feature') || types.includes('park') || types.includes('point_of_interest');
-
-        if (isFeature) {
-          nearbyFeature = result.formatted_address;
-          break;
+          
+          // If still too long, truncate
+          if (description.length > 50) {
+            description = description.substring(0, 47) + '...';
+          }
         }
       }
+    } catch (err) {
+      console.warn("Reverse geocoding failed:", err);
+      description = 'Unnamed region';
+    }
 
-      let elevation = 0;
-      let terrain = 'unknown';
-      let landCover = 'unknown';
+    const timestamp = Date.now();
 
-      const types = geoData.results[0]?.types || [];
-
-      if (types.includes('park')) landCover = 'forest or green space';
-      else if (types.includes('natural_feature')) landCover = 'natural terrain';
-      else if (types.includes('airport') || types.includes('industrial')) landCover = 'developed';
-      else if (types.includes('locality') || types.includes('neighborhood')) landCover = 'urban or residential';
-      else if (types.includes('route')) landCover = 'transport corridor';
-
-          try {
-            const elevRes = await fetch('/api/elevation', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lat, lng }),
-            });
-
-            if (!elevRes.ok) {
-              throw new Error(`API route error: ${elevRes.status}`);
-            }
-
-            const elevData = await elevRes.json();
-            elevation = elevData.elevation || 0;
-            terrain = classifyTerrain(elevation);
-          } catch (error) {
-            console.error("Elevation fetch failed:", error);
-          }
-
-      //DISTANCE TO NEAREST TOWN
-      let distanceToTown = null;
-      if (townLat && townLng) {
-        distanceToTown = haversineDistance({ lat, lng }, { lat: townLat, lng: townLng });
-      }
-
-      //PLACEMARK FUNCTION
-      const place = {
-        landCover,
-        nearbyFeature,
-        lat,
-        lng,
-        elevation: Math.round(elevation),
-        terrain,
-        timestamp: new Date().toISOString(),
-        description: geoData.results[0]?.formatted_address || 'Unknown location',
-        nearestTown,
-        distanceToTown: distanceToTown ? Math.round(distanceToTown) : null,
-      };
-
-      setClickedPlaces((prev) => [...prev, place]);
+    setClickedPlaces(prev => {
+      const updated = [...prev, {
+        type: 'region',
+        coordinates: [...coordinates],
+        center: { lat: centerLat, lng: centerLng },
+        description: description,
+        timestamp,
+      }];
+      return updated;
+    });
   };
 
-
-//REGION SELECT
-  const handleRegionSelect = async (coordinates) => {
-      if (!coordinates || coordinates.length === 0) return;
-
-      // Compute centroid of polygon
-      const lats = coordinates.map(c => c.lat);
-      const lngs = coordinates.map(c => c.lng);
-      const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-      const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
-
-      let description = 'Selected region';
-
-      // Try reverse geocoding center point for context
-      try {
-        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
-        );
-        const data = await res.json();
-        if (data.results?.[0]) {
-          description = data.results[0].formatted_address;
-        }
-      } catch (err) {
-        console.warn("Reverse geocoding failed:", err);
-      }
-
-      // Add region as a pseudo-placemark
-      const region = {
-        type: 'region',
-        coordinates,
-        center: { lat: centerLat, lng: centerLng },
-        description,
-        timestamp: new Date().toISOString(),
-      };
-
-      setClickedPlaces((prev) => [...prev, region]);
-    };
-
-
-//CLUSTER FUNCTION
-function clusterPlaces(places, thresholdKm = 10) {
-  const clusters = [];
+  //CLUSTER FUNCTION
+  function clusterPlaces(places, thresholdKm = 10) {
+    const clusters = [];
 
     for (const place of places) {
       let foundCluster = false;
@@ -252,121 +339,123 @@ function clusterPlaces(places, thresholdKm = 10) {
       }
     }
 
-  return clusters;
-}
-
-//BOUNDING BOX
-
-function computeBoundsAndCentroid(places) {
-  if (places.length === 0) return { bounds: null, centroid: null };
-
-  const lats = places.map(p => p.lat);
-  const lngs = places.map(p => p.lng);
-
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-  const centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
-
-  return {
-    bounds: {
-      minLat, maxLat,
-      minLng, maxLng,
-    },
-    centroid: {
-      lat: centroidLat,
-      lng: centroidLng,
-    },
-  };
-}
-
-//ANALYZE FUNCTIONS
-
-const analyzePlaces = async () => {
-  setLoading(true);  // show loading state
-  setShowIntentInput(false);
-  setLoading(true);
-
-//Bounds
-  const { bounds, centroid } = computeBoundsAndCentroid(clickedPlaces);
-setBoundingBox(bounds);
-setCentroid(centroid);
-
-//Nearby places
-const summaries = clickedPlaces.map((p, i) => {
-  if (p.type === 'region') {
-    return `Region ${i + 1}: ${p.description}, drawn by user as a polygon.`;
-  } else {
-    return `Location ${i + 1}: ${p.description} — ${p.terrain} terrain, approx. ${p.elevation}m, near ${p.nearbyFeature}`;
-  }
-}).join('\n');
-
-//Length summary
-let totalDist = 0;
-  for (let i = 1; i < clickedPlaces.length; i++) {
-    totalDist += haversineDistance(clickedPlaces[i - 1], clickedPlaces[i]);
+    return clusters;
   }
 
-// 🏔️ Estimate average slope (elevation change per km)
-let slopeSummary = '';
-if (clickedPlaces.length > 1) {
-  let totalSlope = 0;
-  for (let i = 1; i < clickedPlaces.length; i++) {
-    const elevDiff = Math.abs(clickedPlaces[i].elevation - clickedPlaces[i - 1].elevation);
-    const dist = haversineDistance(clickedPlaces[i], clickedPlaces[i - 1]);
-    if (dist > 0) totalSlope += elevDiff / dist;
+  //BOUNDING BOX
+  function computeBoundsAndCentroid(places) {
+    if (places.length === 0) return { bounds: null, centroid: null };
+
+    const lats = places.map(p => p.lat);
+    const lngs = places.map(p => p.lng);
+
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    const centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+
+    return {
+      bounds: {
+        minLat, maxLat,
+        minLng, maxLng,
+      },
+      centroid: {
+        lat: centroidLat,
+        lng: centroidLng,
+      },
+    };
   }
-  const avgSlope = totalSlope / (clickedPlaces.length - 1);
-  slopeSummary = `Average slope between locations is ~${avgSlope.toFixed(1)} meters per km.`;
-}
 
-//Distance summary
-const distSummary = clickedPlaces.length > 1
-    ? `Average distance between points: ~${Math.round(totalDist / (clickedPlaces.length - 1))} km`
-    : 'Single location selected';
+  //ANALYZE FUNCTIONS
+  const analyzePlaces = async () => {
+    setLoading(true);  // show loading state
+    setShowIntentInput(false);
 
-//Nearest town
-const townSummary = clickedPlaces.map(
-  (p, i) => `Location ${i + 1}: ${p.distanceToTown} km from ${p.nearestTown}`
-).join('\n');
+    // Create new session ID if this is a new session
+    if (!currentSessionId) {
+      setCurrentSessionId(generateSessionId());
+    }
 
-const clusters = clusterPlaces(clickedPlaces);
+    //Bounds
+    const { bounds, centroid } = computeBoundsAndCentroid(clickedPlaces);
+    setBoundingBox(bounds);
+    setCentroid(centroid);
 
-//Cluster summary
-const clusterSummary = clusters.map((group, i) => {
-    const names = group.map((p) => p.description).join(', ');
-    return `Cluster ${i + 1}: ${names}`;
-  }).join('\n');
+    //Nearby places
+    const summaries = clickedPlaces.map((p, i) => {
+      if (p.type === 'region') {
+        return `Region ${i + 1}: ${p.description}, drawn by user as a polygon.`;
+      } else {
+        return `Location ${i + 1}: ${p.description} — ${p.terrain} terrain, approx. ${p.elevation}m, near ${p.nearbyFeature}`;
+      }
+    }).join('\n');
 
-// Terrain distribution
-const terrainCounts = clickedPlaces.reduce((acc, place) => {
+    //Length summary
+    let totalDist = 0;
+    for (let i = 1; i < clickedPlaces.length; i++) {
+      totalDist += haversineDistance(clickedPlaces[i - 1], clickedPlaces[i]);
+    }
+
+    // 🏔️ Estimate average slope (elevation change per km)
+    let slopeSummary = '';
+    if (clickedPlaces.length > 1) {
+      let totalSlope = 0;
+      for (let i = 1; i < clickedPlaces.length; i++) {
+        const elevDiff = Math.abs(clickedPlaces[i].elevation - clickedPlaces[i - 1].elevation);
+        const dist = haversineDistance(clickedPlaces[i], clickedPlaces[i - 1]);
+        if (dist > 0) totalSlope += elevDiff / dist;
+      }
+      const avgSlope = totalSlope / (clickedPlaces.length - 1);
+      slopeSummary = `Average slope between locations is ~${avgSlope.toFixed(1)} meters per km.`;
+    }
+
+    //Distance summary
+    const distSummary = clickedPlaces.length > 1
+      ? `Average distance between points: ~${Math.round(totalDist / (clickedPlaces.length - 1))} km`
+      : 'Single location selected';
+
+    //Nearest town
+    const townSummary = clickedPlaces.map(
+      (p, i) => `Location ${i + 1}: ${p.distanceToTown} km from ${p.nearestTown}`
+    ).join('\n');
+
+    const clusters = clusterPlaces(clickedPlaces);
+
+    //Cluster summary
+    const clusterSummary = clusters.map((group, i) => {
+      const names = group.map((p) => p.description).join(', ');
+      return `Cluster ${i + 1}: ${names}`;
+    }).join('\n');
+
+    // Terrain distribution
+    const terrainCounts = clickedPlaces.reduce((acc, place) => {
       acc[place.terrain] = (acc[place.terrain] || 0) + 1;
       return acc;
     }, {});
 
-// Terrain summary
-const terrainSummary = Object.entries(terrainCounts)
-    .map(([terrain, count]) => `${count} ${terrain}`)
-    .join(', ');
+    // Terrain summary
+    const terrainSummary = Object.entries(terrainCounts)
+      .map(([terrain, count]) => `${count} ${terrain}`)
+      .join(', ');
 
-// Elevation range
-const elevations = clickedPlaces.map(p => p.elevation);
-const minElevation = Math.min(...elevations);
-const maxElevation = Math.max(...elevations);
-const elevationSummary = `Elevations range from ${minElevation}m to ${maxElevation}m.`;
+    // Elevation range
+    const elevations = clickedPlaces.map(p => p.elevation);
+    const minElevation = Math.min(...elevations);
+    const maxElevation = Math.max(...elevations);
+    const elevationSummary = `Elevations range from ${minElevation}m to ${maxElevation}m.`;
 
-//Land cover
-const landCoverCounts = clickedPlaces.reduce((acc, place) => {
-  acc[place.landCover] = (acc[place.landCover] || 0) + 1;
-  return acc;
-}, {});
+    //Land cover
+    const landCoverCounts = clickedPlaces.reduce((acc, place) => {
+      acc[place.landCover] = (acc[place.landCover] || 0) + 1;
+      return acc;
+    }, {});
 
-const landCoverSummary = Object.entries(landCoverCounts)
-  .map(([cover, count]) => `${count} in ${cover}`)
-  .join(', ');
+    const landCoverSummary = Object.entries(landCoverCounts)
+      .map(([cover, count]) => `${count} in ${cover}`)
+      .join(', ');
 
     // 🗺️ Spatial extent
     const lats = clickedPlaces.map(p => p.lat);
@@ -403,208 +492,235 @@ const landCoverSummary = Object.entries(landCoverCounts)
 
     const coverageSummary = `The selected area spans ~${Math.round(maxDist)} km, centered near ${centerDescription}.`;
 
+    //GPT PROMPT
+    const prompt = `
+      The user is exploring places on a map with the goal: "${intent}".
+      Here are the selected places, including rough descriptions and locations:
 
-//GPT PROMPT
-  const prompt = `
-    The user is trying to: "${intent}".
+      They have selected ${clickedPlaces.length} location${clickedPlaces.length > 1 ? 's' : ''}, each with specific terrain and features:
 
-    They have selected ${clickedPlaces.length} location${clickedPlaces.length > 1 ? 's' : ''}, each with specific terrain and features:
+      ${summaries}
 
-    ${summaries}
+      Distance overview:
+      ${distSummary}
 
-    Distance overview:
-    ${distSummary}
+      Nearest towns:
+      ${townSummary}
 
-    Nearest towns:
-    ${townSummary}
+      Terrain distribution: ${terrainSummary}
+      ${elevationSummary}
+      ${slopeSummary}
 
-    Terrain distribution: ${terrainSummary}
-    ${elevationSummary}
-    ${slopeSummary}
+      Land cover types: ${landCoverSummary}
 
-    Land cover types: ${landCoverSummary}
+      Spatial coverage: ${coverageSummary}
 
-    Spatial coverage: ${coverageSummary}
+      Clusters of interest:
+      ${clusterSummary}
 
-    Clusters of interest:
-    ${clusterSummary}
+      ---
 
-    ---
+      Based on these, offer a thoughtful interpretation that shows insight into the topography, landscape, environment, and cultural contexts of the places selected.
+      - What might be interesting about this combination of places?
+      - What stories do these locations suggest?
+      - What do they reflect about the user's interest or pattern of exploration?
 
-      Please analyze the spatial pattern and terrain characteristics. 
-      Interpret what this might suggest about the user's goal or constraints?
-      Offer several insights or options. 
-      Structure your response using clear sections or bullet points so it’s easy to follow and build upon with follow-up questions.
-  `;
+        Offer several insights or options. 
+        Structure your response using clear sections or bullet points so it's easy to follow and build upon with follow-up questions.
+      Avoid sounding like a data report. Speak like a cultural guide or perceptive observer.
+    `;
 
+    try {
+      const res = await fetch('/api/gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
 
-  try {
-    const res = await fetch('/api/gpt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    });
+      const data = await res.json();
+      const newHistory = [intent, data.result];
+      setConversationHistory(newHistory);
+      
+      // Create/update session immediately after getting the response
+      setTimeout(() => createOrUpdateSession(), 100);
+      
+    } catch (error) {
+      console.error("GPT fetch failed", error);
+      setResponse("Error generating response.");
+    } finally {
+      setLoading(false);  // hide loading state
+    }
+  };
 
-    const data = await res.json();
-    setConversationHistory([
-      `${intent}`,
-      data.result,
-]);
-  } catch (error) {
-    console.error("GPT fetch failed", error);
-    setResponse("Error generating response.");
-  } finally {
-    setLoading(false);  // hide loading state
-  }
-};
+  //FOLLOW UP
+  const handleFollowUp = async (question) => {
+    setLoading(true);
 
-//FOLLOW UP
-const handleFollowUp = async (question) => {
-  setLoading(true);
+    // Format conversation so far with speaker labels
+    const formattedHistory = conversationHistory.map((entry, idx) => {
+      return idx % 2 === 0
+        ? `🐼  ${entry}`
+        : `🤖  ${entry}`;
+    }).join('\n\n');
 
-  // Format conversation so far with speaker labels
-  const formattedHistory = conversationHistory.map((entry, idx) => {
-    return idx % 2 === 0
-      ? `🐼  ${entry}`
-      : `🤖  ${entry}`;
-  }).join('\n\n');
+    // New follow-up with classification and reflection guidance
+    const newPrompt = `${question}
 
-
-  // New follow-up with classification and reflection guidance
-  const newPrompt = `${question}
-
-Interpret the type of follow-up. Is the user asking for clarification, adjusting constraints, or requesting next steps? You don’t need to report the type — just use it to guide your response.
+Interpret the type of follow-up. Is the user asking for clarification, adjusting constraints, or requesting next steps? You don't need to report the type — just use it to guide your response.
 
 Reflect on the full history so far. Has the user's objective evolved or become clearer? Adjust your response accordingly.
 
 Continue the conversation naturally.`;
 
-  const fullPrompt = `${formattedHistory}\n\n${newPrompt}`;
+    const fullPrompt = `${formattedHistory}\n\n${newPrompt}`;
 
-  try {
-    const res = await fetch('/api/gpt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: fullPrompt }),
-    });
+    try {
+      const res = await fetch('/api/gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: fullPrompt }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    // Append new question and GPT response to conversation history
-    setConversationHistory((prev) => [...prev, question, data.result]);
+      // Append new question and GPT response to conversation history
+      const updatedHistory = [...conversationHistory, question, data.result];
+      setConversationHistory(updatedHistory);
 
-  } catch (error) {
-    console.error("GPT follow-up error", error);
-    setResponse("Error generating follow-up response.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Update session with new conversation
+      setTimeout(() => createOrUpdateSession(), 100);
 
-const onRegionSelect = async (coords) => {
-  const lat = coords[0].lat;
-  const lng = coords[0].lng;
-
-  try {
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-    );
-    const data = await response.json();
-
-    console.log('📍 Geocode API result:', data); // 👈 Add this
-
-    const address = data?.results?.[0]?.formatted_address || 'Unnamed region';
-    return address;
-  } catch (error) {
-    console.error('Geocoding error:', error);
-    return 'Unknown region';
-  }
-};
-
-return (
-<div className="relative h-screen w-screen">
-
-{/* INPUT SELECTOR */}
-<div className="absolute top-20 left-4 z-20 bg-white p-2 rounded shadow space-x-2 text-sm">
-  <label>
-    <input
-      type="radio"
-      name="inputMode"
-      value="click"
-      checked={inputMode === 'click'}
-      onChange={() => setInputMode('click')}
-    /> Click mode
-  </label>
-  <label>
-    <input
-      type="radio"
-      name="inputMode"
-      value="draw"
-      checked={inputMode === 'draw'}
-      onChange={() => setInputMode('draw')}
-    /> Draw mode
-  </label>
-</div>
-
-    {/* FULL-SCREEN MAP */}
-    <div className="absolute inset-0 z-0">
-      <LoadScript
-  googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
-  libraries={['drawing', 'geometry']} // geometry optional
->
-
-<MapPanel
-  clickedPlaces={clickedPlaces}
-  setClickedPlaces={setClickedPlaces}
-  handleMapClick={handleMapClick}
-  onRegionSelect={onRegionSelect}
-  inputMode={inputMode}
-/>
-</LoadScript>
-    </div>
-
-  {/* DISPLAY PAST SESSIONS */}
-{!loading && conversationHistory.length === 0 && pastSessions.length > 0 && showIntentInput && (
-  <RecentSessions pastSessions={pastSessions} onResume={resumeSession} />
-)}
-
-    {/* FLOATING INTENT INPUT */}
-    {conversationHistory.length === 0 && !loading && showIntentInput && (
-      <IntentInput
-        intent={intent}
-        setIntent={setIntent}
-        onAnalyze={analyzePlaces}
-      />
-    )}
-
-    {/* LOADING INDICATOR */}
-    {loading && <LoadingBar />}
-
-    {/* RESPONSE TRAY */}
-    {conversationHistory.length > 0 && (
-      <div className="fixed bottom-[5vh] left-1/2 transform -translate-x-1/2 w-full max-w-4xl z-10">
-        
-        {/* FAB */}
-        {!showIntentInput && (
-          <FAB
-            onClick={() => {
-              clearMemory();
-              setShowIntentInput(true);
-            }}
-            className="absolute -top-12 left-1/2 transform -translate-x-1/2 z-20"
-          />
-        )}
-
-        {/* RESPONSE CARD */}
-      <ResponseCard
-        intent={intent}
-        conversationHistory={conversationHistory}
-        onFollowUp={handleFollowUp}
-      />
-      </div>
-    )}
-
-    
-    </div>
-    );
+    } catch (error) {
+      console.error("GPT follow-up error", error);
+      setResponse("Error generating follow-up response.");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const onRegionSelect = async (coordinates) => {
+    if (!coordinates || coordinates.length === 0) return;
+
+    // Compute center
+    const lats = coordinates.map(c => c.lat);
+    const lngs = coordinates.map(c => c.lng);
+    const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+
+    let description = 'Unnamed region';
+
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
+      );
+      const data = await res.json();
+      if (data.results?.[0]) {
+        description = data.results[0].formatted_address;
+      }
+    } catch (err) {
+      console.warn("Reverse geocoding failed:", err);
+    }
+
+    const region = {
+      type: 'region',
+      coordinates,
+      center: { lat: centerLat, lng: centerLng },
+      description,
+      timestamp: Date.now(),
+    };
+
+    console.log('🌍 Final description before adding to state:', description);
+
+    setClickedPlaces((prev) => [...prev, region]);
+  };
+
+  return (
+    <div className="relative h-screen w-screen">
+
+      {conversationHistory.length === 0 && showIntentInput && (
+        <>
+          {/* INPUT SELECTOR */}
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white p-2 rounded-full shadow-md flex px-4 items-center space-x-4 text-sm">
+            <button
+              className={`px-4 py-1 rounded-full ${inputMode === 'click' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
+              onClick={() => setInputMode('click')}
+            >
+              Click
+            </button>
+            <button
+              className={`px-4 py-1 rounded-full ${inputMode === 'draw' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
+              onClick={() => setInputMode('draw')}
+            >
+              Draw
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* FULL-SCREEN MAP */}
+      <div className="absolute inset-0 z-0">
+        <LoadScript
+          googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+          libraries={googleMapsLibraries}
+        >
+          <MapPanel
+            clickedPlaces={clickedPlaces}
+            setClickedPlaces={setClickedPlaces}
+            handleMapClick={handleMapClick}
+            onRegionSelect={onRegionSelect}
+            inputMode={inputMode}
+          />
+        </LoadScript>
+      </div>
+
+      {/* DISPLAY PAST SESSIONS */}
+      {!loading && conversationHistory.length === 0 && pastSessions.length > 0 && showIntentInput && (
+        <RecentSessions 
+          pastSessions={pastSessions} 
+          onResume={resumeSession} 
+          onDelete={handleDeleteSession}
+        />
+      )}
+
+      {/* FLOATING INTENT INPUT */}
+      {conversationHistory.length === 0 && !loading && showIntentInput && (
+        <IntentInput
+          intent={intent}
+          setIntent={setIntent}
+          onAnalyze={analyzePlaces}
+        />
+      )}
+
+      {/* LOADING INDICATOR */}
+      {loading && <LoadingBar />}
+
+      {/* RESPONSE TRAY */}
+      {conversationHistory.length > 0 && (
+        <div className="fixed top-4 bottom-4 right-4 w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col overflow-hidden">
+    
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <ResponseCard
+              intent={intent}
+              conversationHistory={conversationHistory}
+              onFollowUp={handleFollowUp}
+            />
+          </div>
+
+          {/* Sticky button section */}
+          <div className="p-4 border-t">
+            <FAB
+              onClick={() => {
+                clearMemory();
+                setShowIntentInput(true);
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg"
+            />
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

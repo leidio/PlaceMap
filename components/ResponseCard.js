@@ -14,14 +14,14 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
   const toggle = () => setExpanded((prev) => !prev);
 
   const messagePairs = [];
-    for (let i = 0; i < conversationHistory.length; i += 2) {
-      const question = conversationHistory[i];
-      const answer = conversationHistory[i + 1];
-      messagePairs.push({ question, answer });
-    }
+  for (let i = 0; i < conversationHistory.length; i += 2) {
+    const question = conversationHistory[i];
+    const answer = conversationHistory[i + 1];
+    messagePairs.push({ question, answer });
+  }
 
   return (
-    <div className="w-full bg-white border border-gray-200 text-sm rounded-xl overflow-hidden">
+    <div className="w-full h-full bg-white border border-gray-200 text-sm rounded-xl overflow-hidden flex flex-col">
       <button
         onClick={toggle}
         onKeyDown={(e) => {
@@ -44,51 +44,47 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
         )}
       </button>
 
-      <div
-        className={`transition-all duration-500 ease-in-out w-full ${
-          expanded ? 'max-h-[25vh]' : 'max-h-0'
-        }`}
-      >
-        <div className="overflow-y-auto h-full max-h-[25vh] px-4 pt-4 pb-6">
+      {expanded && (
+        <div className="overflow-y-auto flex-grow px-4 pt-4 pb-6">
           <h3 className="text-base font-semibold mb-2">{intent}</h3>
-{messagePairs.map((pair, i) => (
-  <div key={i} className="mt-4 border-t pt-4 text-gray-800 whitespace-pre-line">
-    {/* Only show follow-up questions (skip the first one) */}
-    {i > 0 && (
-      <h3 className="text-base font-semibold text-gray-900 mb-1">
-        {pair.question}
-      </h3>
-    )}
-    <p>{pair.answer}</p>
-  </div>
-))}
 
-      <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (followUp.trim()) {
-          onFollowUp(followUp);
-          setFollowUp('');
-        }
-      }}
-      className="mt-4 flex gap-2 items-center"
-    >
-      <input
-        type="text"
-        placeholder="Ask a follow-up..."
-        value={followUp}
-        onChange={(e) => setFollowUp(e.target.value)}
-        className="flex-grow p-2 border rounded-md text-sm"
-      />
-      <button
-        type="submit"
-        className="bg-blue-600 text-white px-4 py-2 rounded-md"
-      >
-        Send
-      </button>
-    </form>
+          {messagePairs.map((pair, i) => (
+            <div key={i} className="mt-4 border-t pt-4 text-gray-800 whitespace-pre-line">
+              {i > 0 && (
+                <h3 className="text-base font-semibold text-gray-900 mb-1">
+                  {pair.question}
+                </h3>
+              )}
+              <p>{pair.answer}</p>
+            </div>
+          ))}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (followUp.trim()) {
+                onFollowUp(followUp);
+                setFollowUp('');
+              }
+            }}
+            className="mt-4 flex gap-2 items-center"
+          >
+            <input
+              type="text"
+              placeholder="Ask a follow-up..."
+              value={followUp}
+              onChange={(e) => setFollowUp(e.target.value)}
+              className="flex-grow p-2 border rounded-md text-sm"
+            />
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded-md"
+            >
+              Send
+            </button>
+          </form>
         </div>
-      </div>
+      )}
     </div>
   );
-}
+} 
