@@ -1,4 +1,4 @@
-// Paste of your current MapPanel.js with cursor logic to be added.
+// Complete MapPanel.js with all fixes
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -153,25 +153,38 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         coords.push({ lat: point.lat(), lng: point.lng() });
       }
       e.overlay.setMap(null);
+      
+      // Always call onRegionSelect to get the location name
       if (onRegionSelect) {
-        await onRegionSelect(coords);
+        try {
+          await onRegionSelect(coords);
+        } catch (error) {
+          console.error('Error in onRegionSelect:', error);
+        }
       }
+      
       // Only restart drawing mode if we're still in draw mode and not locked
       if (inputMode === 'draw' && 
           !sessionLocked && 
+          window.google?.maps?.drawing &&
           drawingManagerRef.current &&
           typeof drawingManagerRef.current.setDrawingMode === 'function') {
-        drawingManagerRef.current.setDrawingMode(null);
-        setTimeout(() => {
-          if (inputMode === 'draw' && 
-              !sessionLocked && 
-              drawingManagerRef.current &&
-              typeof drawingManagerRef.current.setDrawingMode === 'function') {
-            drawingManagerRef.current.setDrawingMode(
-              window.google.maps.drawing.OverlayType.POLYGON
-            );
-          }
-        }, 200);
+        try {
+          drawingManagerRef.current.setDrawingMode(null);
+          setTimeout(() => {
+            if (inputMode === 'draw' && 
+                !sessionLocked && 
+                window.google?.maps?.drawing &&
+                drawingManagerRef.current &&
+                typeof drawingManagerRef.current.setDrawingMode === 'function') {
+              drawingManagerRef.current.setDrawingMode(
+                window.google.maps.drawing.OverlayType.POLYGON
+              );
+            }
+          }, 200);
+        } catch (error) {
+          console.warn('Error managing drawing mode:', error);
+        }
       }
     }
   }, [onRegionSelect, inputMode, sessionLocked]);
@@ -214,17 +227,22 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     setTimeout(() => {
       if (inputMode === 'draw' && 
           !sessionLocked && 
+          window.google?.maps?.drawing &&
           drawingManagerRef.current &&
           typeof drawingManagerRef.current.setDrawingMode === 'function') {
-        drawingManagerRef.current.setDrawingMode(null);
-        setTimeout(() => {
-          if (drawingManagerRef.current &&
-              typeof drawingManagerRef.current.setDrawingMode === 'function') {
-            drawingManagerRef.current.setDrawingMode(
-              window.google.maps.drawing.OverlayType.POLYGON
-            );
-          }
-        }, 100);
+        try {
+          drawingManagerRef.current.setDrawingMode(null);
+          setTimeout(() => {
+            if (drawingManagerRef.current &&
+                typeof drawingManagerRef.current.setDrawingMode === 'function') {
+              drawingManagerRef.current.setDrawingMode(
+                window.google.maps.drawing.OverlayType.POLYGON
+              );
+            }
+          }, 100);
+        } catch (error) {
+          console.warn('Error restarting drawing after delete:', error);
+        }
       } else {
         setDrawKey(prev => prev + 1);
       }

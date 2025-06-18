@@ -1,45 +1,65 @@
+import { useState } from "react";
+import { BiTrash } from "react-icons/bi";
+import { ChevronUp, ChevronDown } from "lucide-react";
+
 export default function RecentSessions({ pastSessions, onResume, onDelete }) {
+  const [expanded, setExpanded] = useState(true);
   if (pastSessions.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 bg-white border border-gray-200 shadow-lg rounded-lg p-4 z-30 max-w-xs w-full">
-      <h4 className="font-semibold text-sm mb-2 text-gray-800">Recent Sessions</h4>
-      <ul className="space-y-2 max-h-64 overflow-y-auto">
-        {pastSessions.map((session) => (
-          <li key={session.id} className="relative">
-            {/* Resume session button */}
+    <>
+      {expanded ? (
+        <div className="fixed top-4 right-4 backdrop-blur-sm bg-white/80 shadow-lg rounded-lg z-30 w-full max-w-xs max-h-[calc(100vh_-_8rem)] overflow-y-auto">
+          <div className="flex justify-between items-center px-4 pt-4 pb-2">
+            <h4 className="font-semibold text-sm pb-2 text-gray-800">Recent Sessions</h4>
             <button
-              onClick={() => onResume(session)}
-              className="w-full text-left p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+              onClick={() => setExpanded(false)}
+              className="text-gray-400 hover:text-gray-600"
+              title="Collapse"
             >
-              <h4 className="font-semibold text-sm text-gray-800 truncate">{session.intent}</h4>
-              {session.conversationHistory?.[1] && (
-                <p className="text-xs text-gray-500 mt-1 truncate">
-                  {session.conversationHistory[1].slice(0, 100)}...
-                </p>
-              )}
-              {/* Show timestamp */}
-              {session.timestamp && (
-                <p className="text-xs text-gray-400 mt-1">
-                  {new Date(session.timestamp).toLocaleDateString()}
-                </p>
-              )}
+              <ChevronUp className="w-4 h-4" />
             </button>
-
-            {/* Delete session button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent triggering the resume button
-                onDelete(session.id);
-              }}
-              className="absolute top-2 right-2 text-gray-400 hover:text-red-600 z-10"
-              aria-label="Delete session"
-            >
-              🗑
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+          </div>
+          <ul className="px-4 pb-4 space-y-2">
+            {pastSessions.map((session) => (
+              <li key={session.id} className="relative">
+                <button
+                  onClick={() => onResume(session)}
+                  className="w-full text-left p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+                >
+                  <h4 className="font-semibold text-sm text-gray-800 truncate">{session.intent}</h4>
+                  {session.conversationHistory?.[1] && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">
+                      {session.conversationHistory[1].slice(0, 100)}...
+                    </p>
+                  )}
+                  <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
+                    <span>{new Date(session.timestamp).toLocaleDateString()}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(session.id);
+                      }}
+                      className="text-gray-400 hover:text-red-600"
+                      aria-label="Delete session"
+                    >
+                      <BiTrash className="text-base" />
+                    </button>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <button
+          onClick={() => setExpanded(true)}
+          className="fixed top-4 right-4 backdrop-blur-sm bg-white/80 shadow-lg rounded-lg z-30 w-full max-w-xs flex items-center justify-between px-4 pt-4 pb-2"
+        >
+          <h4 className="font-semibold pb-2 text-sm text-gray-800">Recent Sessions</h4>
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        </button>
+      )}
+    </>
   );
 }
