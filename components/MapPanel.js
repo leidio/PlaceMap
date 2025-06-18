@@ -1,4 +1,4 @@
-// MapPanel.js
+// Paste of your current MapPanel.js with cursor logic to be added.
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -20,7 +20,6 @@ const defaultCenter = {
   lng: 8.2275,
 };
 
-// Map options - memoized outside component to prevent re-creation
 const mapOptions = {
   disableDefaultUI: false,
   zoomControl: true,
@@ -29,8 +28,8 @@ const mapOptions = {
   streetViewControl: true,
   rotateControl: true,
   fullscreenControl: true,
-  gestureHandling: 'greedy', // This is key for smooth panning
-  clickableIcons: false, // Prevents interference with map clicks
+  gestureHandling: 'greedy',
+  clickableIcons: false,
 };
 
 function getPolygonCenter(coordinates) {
@@ -50,13 +49,10 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   const [buttonPositions, setButtonPositions] = useState([]);
   const overlayRefs = useRef([]);
 
-
-  // Memoize the map load handler
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
   }, []);
 
-  // Memoize the map click handler
   const memoizedHandleMapClick = useCallback((e) => {
     if (inputMode === 'click') {
       handleMapClick(e);
@@ -87,7 +83,6 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [drawKey]);
 
-  // Track overlay positions for portal buttons - using setInterval for reliability
   useEffect(() => {
     const updateButtonPositions = () => {
       const positions = [];
@@ -102,11 +97,18 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
       });
       setButtonPositions(positions);
     };
-
-    // Use setInterval for consistent updates
     const interval = setInterval(updateButtonPositions, 100);
     return () => clearInterval(interval);
   }, [clickedPlaces]);
+
+  // 🧠 PATCH CURSOR BASED ON MODE
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.setOptions({
+      draggableCursor: inputMode === 'click' ? 'crosshair' : 'default',
+      draggingCursor: 'grabbing',
+    });
+  }, [inputMode]);
 
   const handleOverlayComplete = useCallback(async (e) => {
     if (isCancelledRef.current) {
@@ -114,7 +116,6 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
       e.overlay.setMap(null);
       return;
     }
-
     if (e.type === 'polygon') {
       const path = e.overlay.getPath();
       const coords = [];
@@ -122,16 +123,10 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         const point = path.getAt(i);
         coords.push({ lat: point.lat(), lng: point.lng() });
       }
-
-      // Remove the temporary overlay immediately
       e.overlay.setMap(null);
-
-      // Call onRegionSelect and wait for it to complete
       if (onRegionSelect) {
         await onRegionSelect(coords);
       }
-
-      // Force a complete reinitialization of the DrawingManager
       if (drawingManagerRef.current) {
         drawingManagerRef.current.setDrawingMode(null);
         setTimeout(() => {
@@ -145,32 +140,16 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     }
   }, [onRegionSelect]);
 
-  // Memoize regions to prevent unnecessary re-renders
-  const regions = useMemo(() => 
-    clickedPlaces.filter(p => p.type === 'region'), 
-    [clickedPlaces]
-  );
+  const regions = useMemo(() => clickedPlaces.filter(p => p.type === 'region'), [clickedPlaces]);
+  const markers = useMemo(() => clickedPlaces.filter(place => place.lat && place.lng), [clickedPlaces]);
+  const polylinePath = useMemo(() => markers.map(p => ({ lat: p.lat, lng: p.lng })), [markers]);
 
-  // Memoize markers to prevent unnecessary re-renders
-  const markers = useMemo(() => 
-    clickedPlaces.filter(place => place.lat && place.lng),
-    [clickedPlaces]
-  );
-
-  // Memoize polyline path
-  const polylinePath = useMemo(() => 
-    markers.map(p => ({ lat: p.lat, lng: p.lng })),
-    [markers]
-  );
-
-  // Memoize polyline options
   const polylineOptions = useMemo(() => ({
     strokeColor: '#3367D6',
     strokeOpacity: 0.8,
     strokeWeight: 2
   }), []);
 
-  // Memoize polygon options
   const polygonOptions = useMemo(() => ({
     strokeColor: '#1E90FF',
     strokeOpacity: 0.8,
@@ -182,7 +161,6 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     zIndex: 1,
   }), []);
 
-  // Memoize drawing manager options
   const drawingManagerOptions = useMemo(() => ({
     drawingControl: false,
     polygonOptions: {
@@ -196,9 +174,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   }), []);
 
   const handleDeleteRegion = useCallback((timestamp) => {
-    setClickedPlaces(prev =>
-      prev.filter(p => p.timestamp !== timestamp)
-    );
+    setClickedPlaces(prev => prev.filter(p => p.timestamp !== timestamp));
     setTimeout(() => {
       if (drawingManagerRef.current) {
         drawingManagerRef.current.setDrawingMode(null);
@@ -219,11 +195,11 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     <>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
-        center={defaultCenter} // Use static center - let user pan naturally
+        center={defaultCenter}
         zoom={7}
         onLoad={onMapLoad}
         onClick={memoizedHandleMapClick}
-        options={mapOptions} // Add the memoized options
+        options={mapOptions}
       >
         {markers.map((place, i) => (
           <Marker 
@@ -233,10 +209,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         ))}
 
         {markers.length > 1 && (
-          <Polyline
-            path={polylinePath}
-            options={polylineOptions}
-          />
+          <Polyline path={polylinePath} options={polylineOptions} />
         )}
 
         {regions.map((region, index) => (
@@ -305,11 +278,10 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         )}
       </GoogleMap>
 
-      {/* Portal buttons rendered outside Google Maps */}
       {buttonPositions.map((position, index) => {
         const region = regions[index];
         if (!position || !region) return null;
-        
+
         return createPortal(
           <button
             key={`portal-button-${region.timestamp}`}

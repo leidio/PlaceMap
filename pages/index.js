@@ -8,6 +8,7 @@ import FAB from '../components/FAB';
 import LoadingBar from '../components/LoadingBar';
 import FollowUpInput from '../components/FollowUpInput';
 import RecentSessions from '../components/RecentSessions';
+import { BiMap, BiPen } from 'react-icons/bi';
 
 const googleMapsLibraries = ['drawing', 'geometry'];
 
@@ -641,17 +642,21 @@ Continue the conversation naturally.`;
       {conversationHistory.length === 0 && showIntentInput && (
         <>
           {/* INPUT SELECTOR */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white p-2 rounded-full shadow-md flex px-4 items-center space-x-4 text-sm">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white rounded-full shadow-md flex items-center space-x-4 text-sm">
             <button
-              className={`px-4 py-1 rounded-full ${inputMode === 'click' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-full ${
+                inputMode === 'click' ? 'bg-blue-600 text-white' : 'text-gray-700'
+              }`}
               onClick={() => setInputMode('click')}
             >
+              <BiMap className="text-current" size={18} />
               Click
             </button>
             <button
-              className={`px-4 py-1 rounded-full ${inputMode === 'draw' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
+              className={`flex itesm-center gap-2 px-5 py-2.5 rounded-full ${inputMode === 'draw' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
               onClick={() => setInputMode('draw')}
             >
+            <BiPen className="text-current" size={18} />
               Draw
             </button>
           </div>
