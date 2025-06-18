@@ -41,7 +41,7 @@ function getPolygonCenter(coordinates) {
   };
 }
 
-export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode }) {
+export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode, handleMapLoad, sessionLocked }) {
   const mapRef = useRef(null);
   const drawingManagerRef = useRef(null);
   const [drawKey, setDrawKey] = useState(0);
@@ -67,21 +67,50 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && drawingManagerRef.current) {
+      if (e.key === 'Escape' && 
+          inputMode === 'draw' && 
+          !sessionLocked && 
+          window.google?.maps?.drawing &&
+          drawingManagerRef.current && 
+          typeof drawingManagerRef.current.setDrawingMode === 'function') {
+        
+        // Set the cancelled flag to abort current drawing
         isCancelledRef.current = true;
-        drawingManagerRef.current.setDrawingMode(null);
+        
+        // Stop current drawing mode
+        try {
+          drawingManagerRef.current.setDrawingMode(null);
+        } catch (error) {
+          console.warn('Error stopping drawing mode:', error);
+        }
+        
+        // Restart polygon drawing mode after a short delay
         setTimeout(() => {
-          if (drawingManagerRef.current) {
-            drawingManagerRef.current.setDrawingMode(
-              window.google.maps.drawing.OverlayType.POLYGON
-            );
+          if (inputMode === 'draw' && 
+              !sessionLocked && 
+              window.google?.maps?.drawing &&
+              drawingManagerRef.current && 
+              typeof drawingManagerRef.current.setDrawingMode === 'function') {
+            try {
+              isCancelledRef.current = false; // Reset the flag
+              drawingManagerRef.current.setDrawingMode(
+                window.google.maps.drawing.OverlayType.POLYGON
+              );
+            } catch (error) {
+              console.warn('Error restarting drawing mode:', error);
+            }
           }
         }, 100);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
+    
+    // Only add listener when in draw mode
+    if (inputMode === 'draw' && !sessionLocked) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [drawKey]);
+  }, [drawKey, inputMode, sessionLocked]);
 
   useEffect(() => {
     const updateButtonPositions = () => {
@@ -127,10 +156,17 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
       if (onRegionSelect) {
         await onRegionSelect(coords);
       }
-      if (drawingManagerRef.current) {
+      // Only restart drawing mode if we're still in draw mode and not locked
+      if (inputMode === 'draw' && 
+          !sessionLocked && 
+          drawingManagerRef.current &&
+          typeof drawingManagerRef.current.setDrawingMode === 'function') {
         drawingManagerRef.current.setDrawingMode(null);
         setTimeout(() => {
-          if (drawingManagerRef.current) {
+          if (inputMode === 'draw' && 
+              !sessionLocked && 
+              drawingManagerRef.current &&
+              typeof drawingManagerRef.current.setDrawingMode === 'function') {
             drawingManagerRef.current.setDrawingMode(
               window.google.maps.drawing.OverlayType.POLYGON
             );
@@ -138,7 +174,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         }, 200);
       }
     }
-  }, [onRegionSelect]);
+  }, [onRegionSelect, inputMode, sessionLocked]);
 
   const regions = useMemo(() => clickedPlaces.filter(p => p.type === 'region'), [clickedPlaces]);
   const markers = useMemo(() => clickedPlaces.filter(place => place.lat && place.lng), [clickedPlaces]);
@@ -176,10 +212,14 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   const handleDeleteRegion = useCallback((timestamp) => {
     setClickedPlaces(prev => prev.filter(p => p.timestamp !== timestamp));
     setTimeout(() => {
-      if (drawingManagerRef.current) {
+      if (inputMode === 'draw' && 
+          !sessionLocked && 
+          drawingManagerRef.current &&
+          typeof drawingManagerRef.current.setDrawingMode === 'function') {
         drawingManagerRef.current.setDrawingMode(null);
         setTimeout(() => {
-          if (drawingManagerRef.current) {
+          if (drawingManagerRef.current &&
+              typeof drawingManagerRef.current.setDrawingMode === 'function') {
             drawingManagerRef.current.setDrawingMode(
               window.google.maps.drawing.OverlayType.POLYGON
             );
@@ -189,15 +229,17 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         setDrawKey(prev => prev + 1);
       }
     }, 50);
-  }, [setClickedPlaces]);
+  }, [setClickedPlaces, inputMode, sessionLocked]);
 
   return (
-    <>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={defaultCenter}
         zoom={7}
-        onLoad={onMapLoad}
+        onLoad={(map) => {
+          mapRef.current = map;
+          if (handleMapLoad) handleMapLoad(map);
+        }}
         onClick={memoizedHandleMapClick}
         options={mapOptions}
       >
@@ -212,118 +254,114 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
           <Polyline path={polylinePath} options={polylineOptions} />
         )}
 
-        {regions.map((region, index) => (
-          <div key={`region-${region.timestamp}`}>
-            <Polygon
-              paths={region.coordinates}
-              options={polygonOptions}
-            />
-            <OverlayView
-              position={getPolygonCenter(region.coordinates)}
-              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-            >
-              <div
-                ref={(el) => (overlayRefs.current[index] = el)}
-                style={{ 
-                  pointerEvents: 'none',
-                  backgroundColor: 'white',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '9999px',
-                  padding: '4px 16px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '14px',
-                  color: '#000000',
-                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                  transform: 'translate(-50%, -50%)',
-                  position: 'absolute'
-                }}
-              >
-                <span 
-                  style={{
-                    color: '#000000',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    maxWidth: '200px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {region.description || 'Unnamed region'}
-                </span>
-                <div style={{ width: '26px', height: '26px' }}></div>
-              </div>
-            </OverlayView>
-          </div>
-        ))}
-
-        {inputMode === 'draw' && (
+        {inputMode === 'draw' && !sessionLocked && window.google?.maps?.drawing && (
           <DrawingManager
-            key={`draw-${drawKey}`}
-            onLoad={(manager) => {
-              drawingManagerRef.current = manager;
-              manager.setDrawingMode(window.google.maps.drawing.OverlayType.POLYGON);
-              google.maps.event.addListenerOnce(manager, 'drawingmode_changed', () => {
-                if (manager.getDrawingMode() === null) {
-                  manager.setDrawingMode(window.google.maps.drawing.OverlayType.POLYGON);
-                }
-              });
-            }}
+            key={drawKey}
+            ref={drawingManagerRef}
             onOverlayComplete={handleOverlayComplete}
             options={drawingManagerOptions}
+            drawingMode={window.google?.maps?.drawing?.OverlayType?.POLYGON}
           />
         )}
-      </GoogleMap>
 
-      {buttonPositions.map((position, index) => {
-        const region = regions[index];
-        if (!position || !region) return null;
+        {regions.map((region, index) => (
+                <div key={`region-${region.timestamp}`}>
+                  <Polygon
+                    paths={region.coordinates}
+                    options={polygonOptions}
+                  />
+                  <OverlayView
+                    position={getPolygonCenter(region.coordinates)}
+                    mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                  >
+                    <div
+                      ref={(el) => (overlayRefs.current[index] = el)}
+                      style={{ 
+                        pointerEvents: 'none',
+                        backgroundColor: 'white',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '9999px',
+                        padding: '4px 16px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '14px',
+                        color: '#000000',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        transform: 'translate(-50%, -50%)',
+                        position: 'absolute'
+                      }}
+                    >
+                      <span 
+                        style={{
+                          color: '#000000',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          maxWidth: '200px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {region.description || 'Unnamed region'}
+                      </span>
+                      {/* Only show delete button spacer if session is not locked */}
+                      {!sessionLocked && (
+                        <div style={{ width: '26px', height: '26px' }}></div>
+                      )}
+                    </div>
+                  </OverlayView>
+                </div>
+              ))}
 
-        return createPortal(
-          <button
-            key={`portal-button-${region.timestamp}`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDeleteRegion(region.timestamp);
-            }}
-            style={{
-              position: 'fixed',
-              top: `${position.top}px`,
-              left: `${position.left}px`,
-              transform: 'translate(-50%, -50%)',
-              color: '#ef4444',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              background: 'white',
-              border: '1px solid #d1d5db',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              padding: '0',
-              lineHeight: '1',
-              width: '26px',
-              height: '26px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 10000,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = '#fee2e2';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = 'white';
-            }}
-          >
-            ×
-          </button>,
-          document.body
-        );
-      })}
-    </>
-  );
-}
+              {/* Render delete buttons only if session is not locked */}
+              {!sessionLocked && buttonPositions.map((position, index) => {
+                const region = regions[index];
+                if (!position || !region) return null;
+
+                return createPortal(
+                  <button
+                    key={`portal-button-${region.timestamp}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteRegion(region.timestamp);
+                    }}
+                    style={{
+                      position: 'fixed',
+                      top: `${position.top}px`,
+                      left: `${position.left}px`,
+                      transform: 'translate(-50%, -50%)',
+                      color: '#ef4444',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      background: 'white',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      padding: '0',
+                      lineHeight: '1',
+                      width: '26px',
+                      height: '26px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 10000,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = '#fee2e2';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = 'white';
+                    }}
+                  >
+                    ×
+                  </button>,
+                  document.body
+                );
+              })}
+            </GoogleMap>
+          );
+        }

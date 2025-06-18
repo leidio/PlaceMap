@@ -4,6 +4,10 @@ module.exports = {
     "./pages/**/*.{js,ts,jsx,tsx}",
     "./components/**/*.{js,ts,jsx,tsx}",
   ],
+  safelist: [
+    'focus:border-black',
+    'focus:ring-black',
+  ],
   theme: {
     extend: {
       colors: {

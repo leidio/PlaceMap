@@ -20,7 +20,7 @@ export default function IntentInput({ intent, setIntent, onAnalyze }) {
       />
       <button
         type="submit"
-        className="bg-stone-200 text-sm px-4 py-2 !rounded-full"
+        className="bg-stone-200 text-sm px-4 py-2 hover:bg-black hover:text-white !rounded-full"
       >
         <BiUpArrowAlt className="text-current" size={20} />
       </button>

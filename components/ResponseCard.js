@@ -53,11 +53,11 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
           placeholder="Ask a follow-up..."
           value={followUp}
           onChange={(e) => setFollowUp(e.target.value)}
-          className="flex-grow h-10 px-3 border rounded-full text-sm"
+          className="flex-grow h-10 px-3 border focus:border-black rounded-full text-sm"
         />
         <button
           type="submit"
-          className="bg-blue-600 text-white px-4 rounded-md flex items-center justify-center h-full"
+          className="h-10 w-10 flex items-center justify-center bg-stone-200 text-black hover:bg-black hover:text-white rounded-lg"
         >
           <BiUpArrowAlt className="text-current" size={20} />
         </button>

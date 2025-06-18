@@ -29,5 +29,11 @@ body,
 }
 
 .input {
-  @apply w-full p-2 border border-civicBorder rounded-md focus:outline-none focus:ring-2 focus:ring-actionBlue;
+  @apply w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-black;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow: none;
 }

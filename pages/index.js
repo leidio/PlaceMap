@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import Sidebar from '../components/Sidebar';
 import MapPanel from '../components/MapPanel';
@@ -63,6 +63,14 @@ export default function PlaceMemoryV5() {
   const [inputMode, setInputMode] = useState('click'); // 'click' or 'draw'
   const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session
   const [expanded, setExpanded] = useState(true);
+  const mapRef = useRef(null);
+  const [isSessionLocked, setIsSessionLocked] = useState(false);
+  const responseScrollRef = useRef(null);
+
+  //Map callback
+  const handleMapLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
 
   //Response or not?
   const responseActive = conversationHistory.length > 0;
@@ -78,6 +86,13 @@ export default function PlaceMemoryV5() {
       }
     }
   }, []);
+
+  //Scroll to the bottom whenever a new message is added
+  useEffect(() => {
+  if (responseScrollRef.current) {
+    responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
+  }
+}, [conversationHistory]);
 
   // Save sessions to localStorage whenever pastSessions changes
   useEffect(() => {
@@ -132,12 +147,13 @@ export default function PlaceMemoryV5() {
     // Save current session before clearing
     createOrUpdateSession();
 
-    // Reset all state
+    // Reset all state including session lock
     setClickedPlaces([]);
     setResponse('');
     setConversationHistory([]);
     setIntent('');
     setCurrentSessionId(null);
+    setIsSessionLocked(false); // Reset session lock when clearing
   };
 
   //RESUME SESSION
@@ -147,6 +163,17 @@ export default function PlaceMemoryV5() {
     setClickedPlaces(session.clickedPlaces || []);
     setCurrentSessionId(session.id);
     setShowIntentInput(false);
+    setIsSessionLocked(true); // 🔒 Lock the session when resuming
+
+    // 🧭 Center map on first saved location (if available)
+    if (mapRef.current && session.clickedPlaces && session.clickedPlaces.length > 0) {
+      const firstPlace = session.clickedPlaces[0];
+      const latLng = firstPlace.center || { lat: firstPlace.lat, lng: firstPlace.lng };
+      if (latLng && latLng.lat && latLng.lng) {
+        mapRef.current.panTo(latLng);
+        mapRef.current.setZoom(12);
+      }
+    }
   };
 
   //DELETE SESSION
@@ -172,6 +199,9 @@ export default function PlaceMemoryV5() {
 
   //PLACEMARKERS
   const handleMapClick = async (e) => {
+    // Don't allow new clicks when session is locked
+    if (isSessionLocked) return;
+
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -264,6 +294,9 @@ export default function PlaceMemoryV5() {
 
   //REGION SELECT
   const handleRegionSelect = async (coordinates) => {
+    // Don't allow new regions when session is locked
+    if (isSessionLocked) return;
+
     if (!coordinates || coordinates.length === 0) return;
 
     const lats = coordinates.map(c => c.lat);
@@ -611,6 +644,9 @@ Continue the conversation naturally.`;
   };
 
   const onRegionSelect = async (coordinates) => {
+    // Don't allow new regions when session is locked
+    if (isSessionLocked) return;
+
     if (!coordinates || coordinates.length === 0) return;
 
     // Compute center
@@ -667,9 +703,9 @@ Continue the conversation naturally.`;
               clearMemory();
               setShowIntentInput(true);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-full shadow-lg"
+            className="bg-stone-200 text-gray-700 hover:bg-black hover:text-white font-medium px-4 py-2 rounded-full shadow-lg"
           >
-            Select a New Area
+            Select a new place
           </button>
         ) : null}
       </div>
@@ -686,6 +722,8 @@ Continue the conversation naturally.`;
             handleMapClick={handleMapClick}
             onRegionSelect={onRegionSelect}
             inputMode={inputMode}
+            handleMapLoad={handleMapLoad} // pass to MapPanel
+            sessionLocked={isSessionLocked}
           />
         </LoadScript>
       </div>
@@ -704,28 +742,30 @@ Continue the conversation naturally.`;
 
       {/* RESPONSE TRAY (conditionally rendered) */}
       {conversationHistory.length > 0 && expanded && (
-        <div className="fixed top-4 bottom-[6rem] right-4 w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col overflow-hidden">
-          {/* Hide button at top of tray */}
-          <button
-            onClick={() => setExpanded(false)}
-            className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 border-b border-gray-200"
-          >
-            Hide
-            <ChevronDown className="ml-2 h-4 w-4" />
-          </button>
+        <div className="fixed right-4 top-4 max-h-[calc(100vh-2rem)] w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col">
 
-          {/* Tray content */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <ResponseCard
-              intent={intent}
-              conversationHistory={conversationHistory}
-              onFollowUp={handleFollowUp}
-              expanded={expanded}
-              setExpanded={setExpanded}
-            />
-          </div>
-        </div>
-      )}
+
+      {/* Hide button at top of tray */}
+      <button
+        onClick={() => setExpanded(false)}
+        className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 border-b border-gray-200"
+      >
+        Hide
+        <ChevronDown className="ml-2 h-4 w-4" />
+      </button>
+
+      {/* Scrollable response area */}
+      <div ref={responseScrollRef} className="overflow-y-auto p-4">
+        <ResponseCard
+          intent={intent}
+          conversationHistory={conversationHistory}
+          onFollowUp={handleFollowUp}
+          expanded={expanded}
+          setExpanded={setExpanded}
+        />
+      </div>
+    </div>
+          )}
 
       {/* FLOATING SHOW BUTTON (when tray is hidden) */}
       {conversationHistory.length > 0 && !expanded && (

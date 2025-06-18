@@ -19,7 +19,7 @@ export default function FollowUpInput({ onSubmit }) {
         value={followUp}
         onChange={(e) => setFollowUp(e.target.value)}
         placeholder="Ask a follow-up..."
-        className="flex-grow px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm focus:border-black focus:ring-2 focus:shadow-none ring-0"
       />
       <button
         type="submit"
