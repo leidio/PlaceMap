@@ -742,7 +742,7 @@ Continue the conversation naturally.`;
 
       {/* RESPONSE TRAY (conditionally rendered) */}
       {conversationHistory.length > 0 && expanded && (
-        <div className="fixed right-4 top-4 max-h-[calc(100vh-2rem)] w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col">
+        <div className="fixed right-4 top-4 max-h-[calc(100vh-2rem)] w-[28rem] z-40 backdrop-blur-sm bg-white/80 shadow-xl rounded-xl flex flex-col">
 
 
       {/* Hide button at top of tray */}

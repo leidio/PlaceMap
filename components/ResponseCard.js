@@ -23,7 +23,7 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
   return (
     <div
       ref={scrollRef}
-      className="overflow-y-auto flex-grow px-4 pt-4 pb-6 text-sm text-gray-800"
+      className="overflow-y-auto bg-transparent flex-grow px-4 pt-4 pb-6 text-sm text-gray-800"
     >
       <h3 className="text-base font-semibold mb-2">{intent}</h3>
 
