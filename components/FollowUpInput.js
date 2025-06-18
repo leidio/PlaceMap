@@ -23,7 +23,7 @@ export default function FollowUpInput({ onSubmit }) {
       />
       <button
         type="submit"
-        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
+        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition h-full"
       >
         Send
       </button>

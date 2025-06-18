@@ -1,3 +1,5 @@
+import { BiUpArrowAlt } from 'react-icons/bi';
+
 export default function IntentInput({ intent, setIntent, onAnalyze }) {
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -7,7 +9,7 @@ export default function IntentInput({ intent, setIntent, onAnalyze }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-20 w-[90%] max-w-xl backdrop-blur-sm bg-white/80 rounded-full shadow-lg px-4 py-2 flex items-center space-x-2"
+      className="w-[40rem] backdrop-blur-sm bg-white/80 rounded-full shadow-lg pl-4 pr-2 py-2 flex items-center space-x-2 h-full"
     >
       <input
         type="text"
@@ -18,10 +20,11 @@ export default function IntentInput({ intent, setIntent, onAnalyze }) {
       />
       <button
         type="submit"
-        className="btn-primary text-sm px-4 py-2 !rounded-full"
+        className="bg-stone-200 text-sm px-4 py-2 !rounded-full"
       >
-        Submit
+        <BiUpArrowAlt className="text-current" size={20} />
       </button>
     </form>
   );
 }
+

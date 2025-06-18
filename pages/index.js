@@ -10,6 +10,7 @@ import FollowUpInput from '../components/FollowUpInput';
 import RecentSessions from '../components/RecentSessions';
 import { BiMap, BiPen, BiUpArrowAlt } from 'react-icons/bi';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import InputMode from '../components/InputMode';
 
 const googleMapsLibraries = ['drawing', 'geometry'];
 
@@ -62,6 +63,9 @@ export default function PlaceMemoryV5() {
   const [inputMode, setInputMode] = useState('click'); // 'click' or 'draw'
   const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session
   const [expanded, setExpanded] = useState(true);
+
+  //Response or not?
+  const responseActive = conversationHistory.length > 0;
 
   // Load sessions from localStorage on component mount
   useEffect(() => {
@@ -646,29 +650,29 @@ Continue the conversation naturally.`;
   return (
     <div className="relative h-screen w-screen">
 
-      {conversationHistory.length === 0 && showIntentInput && (
-        <>
-          {/* INPUT SELECTOR */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-white rounded-full shadow-md flex items-center space-x-4 text-sm">
-            <button
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full ${
-                inputMode === 'click' ? 'bg-blue-600 text-white' : 'text-gray-700'
-              }`}
-              onClick={() => setInputMode('click')}
-            >
-              <BiMap className="text-current" size={18} />
-              Click
-            </button>
-            <button
-              className={`flex itesm-center gap-2 px-5 py-2.5 rounded-full ${inputMode === 'draw' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
-              onClick={() => setInputMode('draw')}
-            >
-            <BiPen className="text-current" size={18} />
-              Draw
-            </button>
+      {/* TOP FIXED INPUT CONTAINER */}
+      <div className="fixed top-4 items-stretch left-1/2 -translate-x-1/2 z-50">
+        {conversationHistory.length === 0 && !loading && showIntentInput ? (
+          <div className="flex items-center space-x-8 h-12">
+            <InputMode inputMode={inputMode} setInputMode={setInputMode} />
+            <IntentInput
+              intent={intent}
+              setIntent={setIntent}
+              onAnalyze={analyzePlaces}
+            />
           </div>
-        </>
-      )}
+        ) : conversationHistory.length > 0 ? (
+          <button
+            onClick={() => {
+              clearMemory();
+              setShowIntentInput(true);
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-full shadow-lg"
+          >
+            Select a New Area
+          </button>
+        ) : null}
+      </div>
 
       {/* FULL-SCREEN MAP */}
       <div className="absolute inset-0 z-0">
@@ -692,15 +696,6 @@ Continue the conversation naturally.`;
           pastSessions={pastSessions} 
           onResume={resumeSession} 
           onDelete={handleDeleteSession}
-        />
-      )}
-
-      {/* FLOATING INTENT INPUT */}
-      {conversationHistory.length === 0 && !loading && showIntentInput && (
-        <IntentInput
-          intent={intent}
-          setIntent={setIntent}
-          onAnalyze={analyzePlaces}
         />
       )}
 
@@ -732,30 +727,15 @@ Continue the conversation naturally.`;
         </div>
       )}
 
-      {/* FAB stays visible */}
-      {conversationHistory.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-40 flex justify-center w-[28rem]">
-          <div className="shadow-lg rounded-xl px-4 py-3">
-            <FAB
-              onClick={() => {
-                clearMemory();
-                setShowIntentInput(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-full"
-            />
-          </div>
-        </div>
-      )}
-
       {/* FLOATING SHOW BUTTON (when tray is hidden) */}
       {conversationHistory.length > 0 && !expanded && (
         <button
-            onClick={() => setExpanded(true)}
-            className="fixed top-4 right-4 w-[28rem] z-50 bg-white shadow-xl rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-100 flex items-center justify-center"
-          >
-            Show response
-            <ChevronUp className="ml-2 h-4 w-4" />
-          </button>
+          onClick={() => setExpanded(true)}
+          className="fixed top-4 right-4 w-[28rem] z-50 bg-white shadow-xl rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-100 flex items-center justify-center"
+        >
+          Show response
+          <ChevronUp className="ml-2 h-4 w-4" />
+        </button>
       )}
     </div>
   );
