@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BiUpArrowAlt } from 'react-icons/bi';
 
 export default function ResponseCard({ intent, conversationHistory, onFollowUp }) {
-  const [expanded, setExpanded] = useState(false);
   const [followUp, setFollowUp] = useState('');
+  const scrollRef = useRef(null);
 
   useEffect(() => {
-    if (conversationHistory.length > 0) setExpanded(true);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [conversationHistory]);
 
   if (conversationHistory.length === 0) return null;
-
-  const toggle = () => setExpanded((prev) => !prev);
 
   const messagePairs = [];
   for (let i = 0; i < conversationHistory.length; i += 2) {
@@ -21,70 +21,47 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
   }
 
   return (
-    <div className="w-full h-full bg-white border border-gray-200 text-sm rounded-xl overflow-hidden flex flex-col">
-      <button
-        onClick={toggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggle();
+    <div
+      ref={scrollRef}
+      className="overflow-y-auto flex-grow px-4 pt-4 pb-6 text-sm text-gray-800"
+    >
+      <h3 className="text-base font-semibold mb-2">{intent}</h3>
+
+      {messagePairs.map((pair, i) => (
+        <div key={i} className="mt-4 border-t pt-4 whitespace-pre-line">
+          {i > 0 && (
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              {pair.question}
+            </h3>
+          )}
+          <p>{pair.answer.replace(/^\u{1f43c}\s+|^\u{1f916}\s+/u, '')}</p>
+        </div>
+      ))}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (followUp.trim()) {
+            onFollowUp(followUp);
+            setFollowUp('');
           }
         }}
-        className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-expanded={expanded}
+        className="mt-8 flex gap-2 items-center"
       >
-        {expanded ? (
-          <>
-            Hide <ChevronDown className="ml-2 h-4 w-4" />
-          </>
-        ) : (
-          <>
-            See response <ChevronUp className="ml-2 h-4 w-4" />
-          </>
-        )}
-      </button>
-
-      {expanded && (
-        <div className="overflow-y-auto flex-grow px-4 pt-4 pb-6">
-          <h3 className="text-base font-semibold mb-2">{intent}</h3>
-
-          {messagePairs.map((pair, i) => (
-            <div key={i} className="mt-4 border-t pt-4 text-gray-800 whitespace-pre-line">
-              {i > 0 && (
-                <h3 className="text-base font-semibold text-gray-900 mb-1">
-                  {pair.question}
-                </h3>
-              )}
-              <p>{pair.answer}</p>
-            </div>
-          ))}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (followUp.trim()) {
-                onFollowUp(followUp);
-                setFollowUp('');
-              }
-            }}
-            className="mt-4 flex gap-2 items-center"
-          >
-            <input
-              type="text"
-              placeholder="Ask a follow-up..."
-              value={followUp}
-              onChange={(e) => setFollowUp(e.target.value)}
-              className="flex-grow p-2 border rounded-md text-sm"
-            />
-            <button
-              type="submit"
-              className="bg-blue-600 text-white px-4 py-2 rounded-md"
-            >
-              Send
-            </button>
-          </form>
-        </div>
-      )}
+        <input
+          type="text"
+          placeholder="Ask a follow-up..."
+          value={followUp}
+          onChange={(e) => setFollowUp(e.target.value)}
+          className="flex-grow h-10 px-3 border rounded-full text-sm"
+        />
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 rounded-md flex items-center justify-center"
+        >
+          <BiUpArrowAlt className="text-current" size={20} />
+        </button>
+      </form>
     </div>
   );
-} 
+}

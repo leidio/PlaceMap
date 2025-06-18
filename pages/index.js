@@ -8,7 +8,8 @@ import FAB from '../components/FAB';
 import LoadingBar from '../components/LoadingBar';
 import FollowUpInput from '../components/FollowUpInput';
 import RecentSessions from '../components/RecentSessions';
-import { BiMap, BiPen } from 'react-icons/bi';
+import { BiMap, BiPen, BiUpArrowAlt } from 'react-icons/bi';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const googleMapsLibraries = ['drawing', 'geometry'];
 
@@ -60,6 +61,7 @@ export default function PlaceMemoryV5() {
   const [response, setResponse] = useState('');
   const [inputMode, setInputMode] = useState('click'); // 'click' or 'draw'
   const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session
+  const [expanded, setExpanded] = useState(true);
 
   // Load sessions from localStorage on component mount
   useEffect(() => {
@@ -521,14 +523,19 @@ export default function PlaceMemoryV5() {
 
       ---
 
-      Based on these, offer a thoughtful interpretation that shows insight into the topography, landscape, environment, and cultural contexts of the places selected.
-      - What might be interesting about this combination of places?
-      - What stories do these locations suggest?
-      - What do they reflect about the user's interest or pattern of exploration?
-
-        Offer several insights or options. 
-        Structure your response using clear sections or bullet points so it's easy to follow and build upon with follow-up questions.
-      Avoid sounding like a data report. Speak like a cultural guide or perceptive observer.
+      Act as a cultural anthropologist and environmental analyst. When a user selects a place, synthesize multiple perspectives to provide deep insights about its character, significance, and context.
+      Interpret what makes this place unique, how it fits into broader patterns, and what stories it tells.
+      Consider:
+          historical context,
+          cultural and social dynamics,
+          economic patterns and influences,
+          geographic and environmental factors, 
+          comparative analysis with similar places,
+          future trends and implications.
+      When relevant, use the data gathered above to answer the user's intent.
+      Respond in a way that interprets these characteristics but do not respond like a book report or essay.
+      Take on a more literary voice.
+      
     `;
 
     try {
@@ -700,32 +707,56 @@ Continue the conversation naturally.`;
       {/* LOADING INDICATOR */}
       {loading && <LoadingBar />}
 
-      {/* RESPONSE TRAY */}
-      {conversationHistory.length > 0 && (
-        <div className="fixed top-4 bottom-4 right-4 w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col overflow-hidden">
-    
-          {/* Scrollable content area */}
+      {/* RESPONSE TRAY (conditionally rendered) */}
+      {conversationHistory.length > 0 && expanded && (
+        <div className="fixed top-4 bottom-[6rem] right-4 w-[28rem] z-40 bg-white shadow-xl rounded-xl flex flex-col overflow-hidden">
+          {/* Hide button at top of tray */}
+          <button
+            onClick={() => setExpanded(false)}
+            className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 border-b border-gray-200"
+          >
+            Hide
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </button>
+
+          {/* Tray content */}
           <div className="flex-1 overflow-y-auto p-4">
             <ResponseCard
               intent={intent}
               conversationHistory={conversationHistory}
               onFollowUp={handleFollowUp}
-            />
-          </div>
-
-          {/* Sticky button section */}
-          <div className="p-4 border-t">
-            <FAB
-              onClick={() => {
-                clearMemory();
-                setShowIntentInput(true);
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg"
+              expanded={expanded}
+              setExpanded={setExpanded}
             />
           </div>
         </div>
       )}
 
+      {/* FAB stays visible */}
+      {conversationHistory.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-40 flex justify-center w-[28rem]">
+          <div className="shadow-lg rounded-xl px-4 py-3">
+            <FAB
+              onClick={() => {
+                clearMemory();
+                setShowIntentInput(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-full"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING SHOW BUTTON (when tray is hidden) */}
+      {conversationHistory.length > 0 && !expanded && (
+        <button
+            onClick={() => setExpanded(true)}
+            className="fixed top-4 right-4 w-[28rem] z-50 bg-white shadow-xl rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-100 flex items-center justify-center"
+          >
+            Show response
+            <ChevronUp className="ml-2 h-4 w-4" />
+          </button>
+      )}
     </div>
   );
 }

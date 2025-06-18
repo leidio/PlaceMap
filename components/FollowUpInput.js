@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BiUpArrowAlt } from 'react-icons/bi';
 
 export default function FollowUpInput({ onSubmit }) {
   const [followUp, setFollowUp] = useState('');

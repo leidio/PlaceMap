@@ -5,7 +5,7 @@ export default function FAB({ onClick, className = "" }) {
       className={`bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg hover:bg-blue-700 transition-all duration-500 ease-in-out
  ${className}`}
     >
-      Ask another question
+      Select a new place
     </button>
   );
 }
