@@ -27,7 +27,7 @@ export default function RecentSessions({ pastSessions, onResume, onDelete }) {
                   onClick={() => onResume(session)}
                   className="w-full text-left p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
                 >
-                  <h4 className="font-semibold text-sm text-gray-800 truncate">{session.intent}</h4>
+                  <h4 className="font-medium text-sm text-gray-800 truncate">{session.intent}</h4>
                   {session.conversationHistory?.[1] && (
                     <p className="text-xs text-gray-500 mt-1 truncate">
                       {session.conversationHistory[1].slice(0, 100)}...
@@ -56,7 +56,7 @@ export default function RecentSessions({ pastSessions, onResume, onDelete }) {
           onClick={() => setExpanded(true)}
           className="fixed top-4 right-4 backdrop-blur-sm bg-white/80 shadow-lg rounded-lg z-30 w-full max-w-xs flex items-center justify-between px-4 pt-4 pb-2"
         >
-          <h4 className="font-semibold pb-2 text-sm text-gray-800">Recent Sessions</h4>
+          <h4 className="font-medium pb-2 text-sm text-gray-800">Recent Sessions</h4>
           <ChevronDown className="w-4 h-4 text-gray-400" />
         </button>
       )}

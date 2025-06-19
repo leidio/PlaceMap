@@ -14,40 +14,86 @@ import InputMode from '../components/InputMode';
 
 const googleMapsLibraries = ['drawing', 'geometry'];
 
-const mapContainerStyle = {
-  width: '100%',
-  height: '100%',
-};
+//MAP CONTAINER
+    const mapContainerStyle = {
+      width: '100%',
+      height: '100%',
+    };
 
-const center = {
-  lat: 46.8182,
-  lng: 8.2275,
-};
+//DEFAULT CENTER
+    const center = {
+      lat: 46.8182,
+      lng: 8.2275,
+    };
 
-function classifyTerrain(elevation) {
-  if (elevation > 2000) return 'high alpine';
-  if (elevation > 1000) return 'mountainous';
-  if (elevation > 500) return 'hilly';
-  return 'valley or lowland';
-}
+//ELEVATION CLASSIFICATION
+    function classifyTerrain(elevation) {
+      if (elevation > 2000) return 'high alpine';
+      if (elevation > 1000) return 'mountainous';
+      if (elevation > 500) return 'hilly';
+      return 'valley or lowland';
+    }
 
-function haversineDistance(coord1, coord2) {
-  const toRad = x => (x * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(coord2.lat - coord1.lat);
-  const dLon = toRad(coord2.lng - coord1.lng);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(coord1.lat)) *
-    Math.cos(toRad(coord2.lat)) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+//DISTANCE BETWEEN POINTS
+    function haversineDistance(coord1, coord2) {
+      const toRad = x => (x * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(coord2.lat - coord1.lat);
+      const dLon = toRad(coord2.lng - coord1.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(coord1.lat)) *
+        Math.cos(toRad(coord2.lat)) *
+        Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
 
-// Generate unique ID for sessions
-function generateSessionId() {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
+//SESSION ID
+    function generateSessionId() {
+      return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+
+//POINTS SAMPLE FOR ELEVATION
+    function generateGridPoints(bounds, density) {
+      const points = [];
+      const latStep = (bounds.north - bounds.south) / (density - 1);
+      const lngStep = (bounds.east - bounds.west) / (density - 1);
+
+      for (let i = 0; i < density; i++) {
+        for (let j = 0; j < density; j++) {
+          const lat = bounds.south + latStep * i;
+          const lng = bounds.west + lngStep * j;
+          points.push({ lat, lng });
+        }
+      }
+      return points;
+    }
+
+    function adaptiveGridDensity(bounds) {
+      const latSpan = bounds.north - bounds.south;
+      const lngSpan = bounds.east - bounds.west;
+      const areaEstimate = latSpan * lngSpan;
+      if (areaEstimate < 0.01) return 10; // small area
+      if (areaEstimate < 0.05) return 15; // medium
+      return 22; // large area (22x22 = 484 points)
+    }
+
+    async function fetchElevationForPoints(points) {
+      try {
+        const response = await fetch('/api/elevation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ locations: points }),
+        });
+        const data = await response.json();
+        return data.results.map((res) => res.elevation);
+      } catch (error) {
+        console.error('Elevation fetch error:', error);
+        return [];
+      }
+    }
+
 
 //PRIMARY FUNCTION
 export default function PlaceMemoryV5() {
@@ -67,166 +113,167 @@ export default function PlaceMemoryV5() {
   const [isSessionLocked, setIsSessionLocked] = useState(false);
   const responseScrollRef = useRef(null);
 
-  //Map callback
-  const handleMapLoad = useCallback((map) => {
-    mapRef.current = map;
-  }, []);
 
-  //Response or not?
+  // MAP CALLBACK
+  const handleMapLoad = useCallback((map) => {
+      mapRef.current = map;
+    }, []);
+
+  // RESPONSE OR NOT?
   const responseActive = conversationHistory.length > 0;
 
-  // Load sessions from localStorage on component mount
+  // LOAD SESSIONS from localStorage on component mount
   useEffect(() => {
-    const savedSessions = localStorage.getItem('pastSessions');
-    if (savedSessions) {
-      try {
-        setPastSessions(JSON.parse(savedSessions));
-      } catch (error) {
-        console.error('Error loading sessions:', error);
-      }
-    }
-  }, []);
-
-  //Scroll to the bottom whenever a new message is added
-  useEffect(() => {
-  if (responseScrollRef.current) {
-    responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
-  }
-}, [conversationHistory]);
-
-  // Save sessions to localStorage whenever pastSessions changes
-  useEffect(() => {
-    localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
-  }, [pastSessions]);
-
-  // Create or update session
-  const createOrUpdateSession = () => {
-    if (!intent || conversationHistory.length === 0) return;
-
-    const sessionData = {
-      id: currentSessionId || generateSessionId(),
-      intent,
-      conversationHistory: [...conversationHistory],
-      clickedPlaces: [...clickedPlaces],
-      timestamp: Date.now()
-    };
-
-    setPastSessions(prev => {
-      // Check if we're updating an existing session
-      if (currentSessionId) {
-        const existingIndex = prev.findIndex(s => s.id === currentSessionId);
-        if (existingIndex !== -1) {
-          // Update existing session
-          const updated = [...prev];
-          updated[existingIndex] = sessionData;
-          return updated;
+      const savedSessions = localStorage.getItem('pastSessions');
+      if (savedSessions) {
+        try {
+          setPastSessions(JSON.parse(savedSessions));
+        } catch (error) {
+          console.error('Error loading sessions:', error);
         }
       }
-      
-      // Create new session (avoid duplicates)
-      const isDuplicate = prev.some(s => 
-        s.intent === sessionData.intent &&
-        JSON.stringify(s.conversationHistory) === JSON.stringify(sessionData.conversationHistory)
-      );
-      
-      if (!isDuplicate) {
-        return [...prev, sessionData];
-      }
-      
-      return prev;
-    });
+    }, []);
 
-    // Set current session ID if it's a new session
-    if (!currentSessionId) {
-      setCurrentSessionId(sessionData.id);
-    }
-  };
+  // AUTO-SCROLL to the bottom whenever a new message is added
+  useEffect(() => {
+      if (responseScrollRef.current) {
+        responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
+      }
+    }, [conversationHistory]);
+
+  // SAVE SESSIONS to localStorage whenever pastSessions changes
+  useEffect(() => {
+      localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
+    }, [pastSessions]);
+
+  // CREATE OR UPDATE SESSION
+  const createOrUpdateSession = () => {
+      if (!intent || conversationHistory.length === 0) return;
+
+      const sessionData = {
+        id: currentSessionId || generateSessionId(),
+        intent,
+        conversationHistory: [...conversationHistory],
+        clickedPlaces: [...clickedPlaces],
+        timestamp: Date.now()
+      };
+
+      setPastSessions(prev => {
+        // Check if we're updating an existing session
+        if (currentSessionId) {
+          const existingIndex = prev.findIndex(s => s.id === currentSessionId);
+          if (existingIndex !== -1) {
+            // Update existing session
+            const updated = [...prev];
+            updated[existingIndex] = sessionData;
+            return updated;
+          }
+        }
+        
+        // Create new session (avoid duplicates)
+        const isDuplicate = prev.some(s => 
+          s.intent === sessionData.intent &&
+          JSON.stringify(s.conversationHistory) === JSON.stringify(sessionData.conversationHistory)
+        );
+        
+        if (!isDuplicate) {
+          return [...prev, sessionData];
+        }
+        
+        return prev;
+      });
+
+      // Set current session ID if it's a new session
+      if (!currentSessionId) {
+        setCurrentSessionId(sessionData.id);
+      }
+    };
 
   //CLEAR MEMORY
   const clearMemory = () => {
-    // Save current session before clearing
-    createOrUpdateSession();
+      // Save current session before clearing
+      createOrUpdateSession();
 
-    // Reset all state including session lock
-    setClickedPlaces([]);
-    setResponse('');
-    setConversationHistory([]);
-    setIntent('');
-    setCurrentSessionId(null);
-    setIsSessionLocked(false); // Reset session lock when clearing
-  };
+      // Reset all state including session lock
+      setClickedPlaces([]);
+      setResponse('');
+      setConversationHistory([]);
+      setIntent('');
+      setCurrentSessionId(null);
+      setIsSessionLocked(false); // Reset session lock when clearing
+    };
 
   //RESUME SESSION
   const resumeSession = (session) => {
-    setIntent(session.intent);
-    setConversationHistory(session.conversationHistory);
-    setClickedPlaces(session.clickedPlaces || []);
-    setCurrentSessionId(session.id);
-    setShowIntentInput(false);
-    setIsSessionLocked(true); // 🔒 Lock the session when resuming
+      setIntent(session.intent);
+      setConversationHistory(session.conversationHistory);
+      setClickedPlaces(session.clickedPlaces || []);
+      setCurrentSessionId(session.id);
+      setShowIntentInput(false);
+      setIsSessionLocked(true); // 🔒 Lock the session when resuming
 
-    // 🧭 Center map on first saved location (if available)
-    if (mapRef.current && session.clickedPlaces && session.clickedPlaces.length > 0) {
-      const firstPlace = session.clickedPlaces[0];
-      const latLng = firstPlace.center || { lat: firstPlace.lat, lng: firstPlace.lng };
-      if (latLng && latLng.lat && latLng.lng) {
-        mapRef.current.panTo(latLng);
-        mapRef.current.setZoom(12);
+      // 🧭 Center map on first saved location (if available)
+      if (mapRef.current && session.clickedPlaces && session.clickedPlaces.length > 0) {
+        const firstPlace = session.clickedPlaces[0];
+        const latLng = firstPlace.center || { lat: firstPlace.lat, lng: firstPlace.lng };
+        if (latLng && latLng.lat && latLng.lng) {
+          mapRef.current.panTo(latLng);
+          mapRef.current.setZoom(12);
+        }
       }
-    }
-  };
+    };
 
   //DELETE SESSION
   const handleDeleteSession = (idToDelete) => {
-    const confirmed = window.confirm("Are you sure you want to delete this session?");
-    if (!confirmed) return;
+      const confirmed = window.confirm("Are you sure you want to delete this session?");
+      if (!confirmed) return;
 
-    setPastSessions(prev => prev.filter(s => s.id !== idToDelete));
-    
-    // If we're deleting the current session, clear current session ID
-    if (currentSessionId === idToDelete) {
-      setCurrentSessionId(null);
-    }
-  };
+      setPastSessions(prev => prev.filter(s => s.id !== idToDelete));
+      
+      // If we're deleting the current session, clear current session ID
+      if (currentSessionId === idToDelete) {
+        setCurrentSessionId(null);
+      }
+    };
 
   //DELETE POLYGON
   const handleDeleteRegion = (indexToRemove) => {
-    setClickedPlaces((prev) => prev.filter((place, idx) => {
-      const isRegion = place.type === 'region' && idx === indexToRemove;
-      return !isRegion;
-    }));
-  };
+      setClickedPlaces((prev) => prev.filter((place, idx) => {
+        const isRegion = place.type === 'region' && idx === indexToRemove;
+        return !isRegion;
+      }));
+    };
 
   //PLACEMARKERS
   const handleMapClick = async (e) => {
-    // Don't allow new clicks when session is locked
-    if (isSessionLocked) return;
+      // Don't allow new clicks when session is locked
+      if (isSessionLocked) return;
 
-    const lat = e.latLng.lat();
-    const lng = e.latLng.lng();
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-    const geoRes = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-    );
-    const geoData = await geoRes.json();
+      const geoRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+      );
+      const geoData = await geoRes.json();
 
-    //NEAREST LOCATLITY AND LAT/LONG
-    let nearestTown = 'Unknown';
-    let townLat = null;
-    let townLng = null;
+      //NEAREST LOCATLITY AND LAT/LONG
+      let nearestTown = 'Unknown';
+      let townLat = null;
+      let townLng = null;
 
-    for (const result of geoData.results) {
-      const hasLocality = result.types.includes('locality') || result.types.includes('administrative_area_level_2');
-      if (hasLocality) {
-        nearestTown = result.formatted_address;
-        townLat = result.geometry.location.lat;
-        townLng = result.geometry.location.lng;
-        break;
+      for (const result of geoData.results) {
+        const hasLocality = result.types.includes('locality') || result.types.includes('administrative_area_level_2');
+        if (hasLocality) {
+          nearestTown = result.formatted_address;
+          townLat = result.geometry.location.lat;
+          townLng = result.geometry.location.lng;
+          break;
+        }
       }
-    }
 
-    //ID NEARBY FEATURES
+  //ID NEARBY FEATURES
     let nearbyFeature = 'None found';
 
     for (const result of geoData.results) {
@@ -269,13 +316,13 @@ export default function PlaceMemoryV5() {
       console.error("Elevation fetch failed:", error);
     }
 
-    //DISTANCE TO NEAREST TOWN
+    //Distance to nearest town
     let distanceToTown = null;
     if (townLat && townLng) {
       distanceToTown = haversineDistance({ lat, lng }, { lat: townLat, lng: townLng });
     }
 
-    //PLACEMARK FUNCTION
+    //Places function
     const place = {
       landCover,
       nearbyFeature,
@@ -292,125 +339,144 @@ export default function PlaceMemoryV5() {
     setClickedPlaces((prev) => [...prev, place]);
   };
 
-  //REGION SELECT
+  // REGION SELECT - ADAPTIVE SAMPLING - POLYGON CENTER - REVERSE GEOCODING - TIMESTAMP - SESSION LOCK
   const handleRegionSelect = async (coordinates) => {
-    // Don't allow new regions when session is locked
+    // 🚫 Respect session lock
     if (isSessionLocked) return;
-
     if (!coordinates || coordinates.length === 0) return;
 
+    // ➕ Compute center of polygon
     const lats = coordinates.map(c => c.lat);
     const lngs = coordinates.map(c => c.lng);
     const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
     const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
 
-    let description = 'Unnamed region'; // Better default fallback
-
+    // 🌍 Reverse geocode
+    let description = 'Unnamed region';
     try {
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
       const res = await fetch(
         `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
       );
       const data = await res.json();
-      
+
       if (data.results && data.results.length > 0) {
-        // Try to get the most specific location name
-        const result = data.results[0];
+        let result = data.results[0];
         description = result.formatted_address || 'Unnamed region';
-        
-        // If formatted_address is too long, try to get a shorter name
+
         if (description.length > 50) {
-          // Look for locality, administrative area, or natural feature
           for (const result of data.results) {
             const types = result.types || [];
-            if (types.includes('locality') || 
-                types.includes('administrative_area_level_2') || 
-                types.includes('natural_feature') ||
-                types.includes('sublocality')) {
+            if (
+              types.includes('locality') ||
+              types.includes('administrative_area_level_2') ||
+              types.includes('natural_feature') ||
+              types.includes('sublocality')
+            ) {
               description = result.formatted_address;
               break;
             }
           }
-          
-          // If still too long, truncate
+
           if (description.length > 50) {
             description = description.substring(0, 47) + '...';
           }
         }
       }
     } catch (err) {
-      console.warn("Reverse geocoding failed:", err);
-      description = 'Unnamed region';
+      console.warn('Reverse geocoding failed:', err);
     }
 
-    const timestamp = Date.now();
+    // 🧠 Elevation Sampling
+    const bounds = {
+      north: Math.max(...lats),
+      south: Math.min(...lats),
+      east: Math.max(...lngs),
+      west: Math.min(...lngs),
+    };
 
+    const density = adaptiveGridDensity(bounds);
+    const samplePoints = generateGridPoints(bounds, density);
+    const elevations = await fetchElevationForPoints(samplePoints);
+
+    let elevationRange = null;
+    if (elevations.length > 0) {
+      const min = Math.min(...elevations);
+      const max = Math.max(...elevations);
+      elevationRange = [Math.round(min), Math.round(max)];
+    }
+
+    // 🗂 Final region object
+    const timestamp = Date.now();
     setClickedPlaces(prev => {
-      const updated = [...prev, {
-        type: 'region',
-        coordinates: [...coordinates],
-        center: { lat: centerLat, lng: centerLng },
-        description: description,
-        timestamp,
-      }];
-      return updated;
+      return [
+        ...prev,
+        {
+          type: 'region',
+          coordinates: [...coordinates],
+          center: { lat: centerLat, lng: centerLng },
+          description,
+          elevationRange,
+          timestamp,
+        },
+      ];
     });
   };
 
   //CLUSTER FUNCTION
   function clusterPlaces(places, thresholdKm = 10) {
-    const clusters = [];
+      const clusters = [];
 
-    for (const place of places) {
-      let foundCluster = false;
+      for (const place of places) {
+        let foundCluster = false;
 
-      for (const cluster of clusters) {
-        const center = cluster[0]; // simple: use first point as center
-        const dist = haversineDistance(center, place);
-        if (dist < thresholdKm) {
-          cluster.push(place);
-          foundCluster = true;
-          break;
+        for (const cluster of clusters) {
+          const center = cluster[0]; // simple: use first point as center
+          const dist = haversineDistance(center, place);
+          if (dist < thresholdKm) {
+            cluster.push(place);
+            foundCluster = true;
+            break;
+          }
+        }
+
+        if (!foundCluster) {
+          clusters.push([place]);
         }
       }
 
-      if (!foundCluster) {
-        clusters.push([place]);
-      }
+      return clusters;
     }
-
-    return clusters;
-  }
 
   //BOUNDING BOX
   function computeBoundsAndCentroid(places) {
-    if (places.length === 0) return { bounds: null, centroid: null };
+      if (places.length === 0) return { bounds: null, centroid: null };
 
-    const lats = places.map(p => p.lat);
-    const lngs = places.map(p => p.lng);
+      const lats = places.map(p => p.lat);
+      const lngs = places.map(p => p.lng);
 
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
 
-    const centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-    const centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+      const centroidLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+      const centroidLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
 
-    return {
-      bounds: {
-        minLat, maxLat,
-        minLng, maxLng,
-      },
-      centroid: {
-        lat: centroidLat,
-        lng: centroidLng,
-      },
-    };
-  }
+      return {
+        bounds: {
+          minLat, maxLat,
+          minLng, maxLng,
+        },
+        centroid: {
+          lat: centroidLat,
+          lng: centroidLng,
+        },
+      };
+    }
 
-  //ANALYZE FUNCTIONS
-  const analyzePlaces = async () => {
+//ANALYZE FUNCTIONS
+const analyzePlaces = async () => {
     setLoading(true);  // show loading state
     setShowIntentInput(false);
 
@@ -419,27 +485,35 @@ export default function PlaceMemoryV5() {
       setCurrentSessionId(generateSessionId());
     }
 
-    //Bounds
+    // Bounds
     const { bounds, centroid } = computeBoundsAndCentroid(clickedPlaces);
     setBoundingBox(bounds);
     setCentroid(centroid);
 
-    //Nearby places
+    //Elevation range
     const summaries = clickedPlaces.map((p, i) => {
-      if (p.type === 'region') {
-        return `Region ${i + 1}: ${p.description}, drawn by user as a polygon.`;
-      } else {
-        return `Location ${i + 1}: ${p.description} — ${p.terrain} terrain, approx. ${p.elevation}m, near ${p.nearbyFeature}`;
-      }
-    }).join('\n');
+        if (p.type === 'region') {
+          const elevationNote = p.elevationRange
+            ? ` with elevation range ${p.elevationRange[0]}m to ${p.elevationRange[1]}m`
+            : '';
+          return `Region ${i + 1}: ${p.description}${elevationNote}, drawn by user as a polygon.`;
+        } else {
+          return `Location ${i + 1}: ${p.description} — ${p.terrain} terrain, approx. ${p.elevation}m, near ${p.nearbyFeature}`;
+        }
+      }).join('\n');
 
-    //Length summary
+    const elevationLines = clickedPlaces.map(place =>
+        `Lat: ${place.lat}, Lng: ${place.lng}` +
+        (place.elevation != null ? `, Elevation: ${Math.round(place.elevation)} meters` : '')
+      ).join('\n');
+
+    // Length summary
     let totalDist = 0;
     for (let i = 1; i < clickedPlaces.length; i++) {
       totalDist += haversineDistance(clickedPlaces[i - 1], clickedPlaces[i]);
     }
 
-    // 🏔️ Estimate average slope (elevation change per km)
+    // Estimate average slope (elevation change per km)
     let slopeSummary = '';
     if (clickedPlaces.length > 1) {
       let totalSlope = 0;
@@ -452,19 +526,19 @@ export default function PlaceMemoryV5() {
       slopeSummary = `Average slope between locations is ~${avgSlope.toFixed(1)} meters per km.`;
     }
 
-    //Distance summary
+    // Distance summary
     const distSummary = clickedPlaces.length > 1
       ? `Average distance between points: ~${Math.round(totalDist / (clickedPlaces.length - 1))} km`
       : 'Single location selected';
 
-    //Nearest town
+    // Nearest town
     const townSummary = clickedPlaces.map(
       (p, i) => `Location ${i + 1}: ${p.distanceToTown} km from ${p.nearestTown}`
     ).join('\n');
 
     const clusters = clusterPlaces(clickedPlaces);
 
-    //Cluster summary
+    // Cluster summary
     const clusterSummary = clusters.map((group, i) => {
       const names = group.map((p) => p.description).join(', ');
       return `Cluster ${i + 1}: ${names}`;
@@ -487,7 +561,7 @@ export default function PlaceMemoryV5() {
     const maxElevation = Math.max(...elevations);
     const elevationSummary = `Elevations range from ${minElevation}m to ${maxElevation}m.`;
 
-    //Land cover
+    // Land cover
     const landCoverCounts = clickedPlaces.reduce((acc, place) => {
       acc[place.landCover] = (acc[place.landCover] || 0) + 1;
       return acc;
@@ -532,8 +606,8 @@ export default function PlaceMemoryV5() {
 
     const coverageSummary = `The selected area spans ~${Math.round(maxDist)} km, centered near ${centerDescription}.`;
 
-    //GPT PROMPT
-    const prompt = `
+  //GPT PROMPT
+  const prompt = `
       The user is exploring places on a map with the goal: "${intent}".
       Here are the selected places, including rough descriptions and locations:
 
@@ -558,11 +632,14 @@ export default function PlaceMemoryV5() {
       Clusters of interest:
       ${clusterSummary}
 
+      Elevation range of a region:
+      ${elevationLines}
+
       ---
 
       Act as a cultural anthropologist and environmental analyst. When a user selects a place, synthesize multiple perspectives to provide deep insights about its character, significance, and context.
       Interpret what makes this place unique, how it fits into broader patterns, and what stories it tells.
-      Consider:
+      Consider as inputs to your synthesis:
           historical context,
           cultural and social dynamics,
           economic patterns and influences,
@@ -571,8 +648,6 @@ export default function PlaceMemoryV5() {
           future trends and implications.
       When relevant, use the data gathered above to answer the user's intent.
       Respond in a way that interprets these characteristics but do not respond like a book report or essay.
-      Take on a more literary voice.
-      
     `;
 
     try {
@@ -599,90 +674,92 @@ export default function PlaceMemoryV5() {
 
   //FOLLOW UP
   const handleFollowUp = async (question) => {
-    setLoading(true);
+      setLoading(true);
 
-    // Format conversation so far with speaker labels
-    const formattedHistory = conversationHistory.map((entry, idx) => {
-      return idx % 2 === 0
-        ? `🐼  ${entry}`
-        : `🤖  ${entry}`;
-    }).join('\n\n');
+      // Format conversation so far with speaker labels
+      const formattedHistory = conversationHistory.map((entry, idx) => {
+        return idx % 2 === 0
+          ? `🐼  ${entry}`
+          : `🤖  ${entry}`;
+      }).join('\n\n');
 
-    // New follow-up with classification and reflection guidance
-    const newPrompt = `${question}
+      // New follow-up with classification and reflection guidance
+      const newPrompt = `${question}
 
-Interpret the type of follow-up. Is the user asking for clarification, adjusting constraints, or requesting next steps? You don't need to report the type — just use it to guide your response.
+      Interpret the type of follow-up. Is the user asking for clarification, adjusting constraints, or requesting next steps? You don't need to report the type — just use it to guide your response.
 
-Reflect on the full history so far. Has the user's objective evolved or become clearer? Adjust your response accordingly.
+      Reflect on the full history so far. Has the user's objective evolved or become clearer? Adjust your response accordingly.
 
-Continue the conversation naturally.`;
+      Continue the conversation naturally.`;
 
-    const fullPrompt = `${formattedHistory}\n\n${newPrompt}`;
+      const fullPrompt = `${formattedHistory}\n\n${newPrompt}`;
 
-    try {
-      const res = await fetch('/api/gpt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt }),
-      });
+      try {
+        const res = await fetch('/api/gpt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: fullPrompt }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      // Append new question and GPT response to conversation history
-      const updatedHistory = [...conversationHistory, question, data.result];
-      setConversationHistory(updatedHistory);
+        // Append new question and GPT response to conversation history
+        const updatedHistory = [...conversationHistory, question, data.result];
+        setConversationHistory(updatedHistory);
 
-      // Update session with new conversation
-      setTimeout(() => createOrUpdateSession(), 100);
+        // Update session with new conversation
+        setTimeout(() => createOrUpdateSession(), 100);
 
-    } catch (error) {
-      console.error("GPT follow-up error", error);
-      setResponse("Error generating follow-up response.");
-    } finally {
-      setLoading(false);
-    }
+      } catch (error) {
+        console.error("GPT follow-up error", error);
+        setResponse("Error generating follow-up response.");
+      } finally {
+        setLoading(false);
+      }
   };
 
+  // REGION SELECT
   const onRegionSelect = async (coordinates) => {
-    // Don't allow new regions when session is locked
-    if (isSessionLocked) return;
+      // Don't allow new regions when session is locked
+      if (isSessionLocked) return;
 
-    if (!coordinates || coordinates.length === 0) return;
+      if (!coordinates || coordinates.length === 0) return;
 
-    // Compute center
-    const lats = coordinates.map(c => c.lat);
-    const lngs = coordinates.map(c => c.lng);
-    const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-    const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+      // Compute center
+      const lats = coordinates.map(c => c.lat);
+      const lngs = coordinates.map(c => c.lng);
+      const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+      const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
 
-    let description = 'Unnamed region';
+      let description = 'Unnamed region';
 
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
-      );
-      const data = await res.json();
-      if (data.results?.[0]) {
-        description = data.results[0].formatted_address;
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
+        );
+        const data = await res.json();
+        if (data.results?.[0]) {
+          description = data.results[0].formatted_address;
+        }
+      } catch (err) {
+        console.warn("Reverse geocoding failed:", err);
       }
-    } catch (err) {
-      console.warn("Reverse geocoding failed:", err);
-    }
 
-    const region = {
-      type: 'region',
-      coordinates,
-      center: { lat: centerLat, lng: centerLng },
-      description,
-      timestamp: Date.now(),
+      const region = {
+        type: 'region',
+        coordinates,
+        center: { lat: centerLat, lng: centerLng },
+        description,
+        timestamp: Date.now(),
+      };
+
+      console.log('🌍 Final description before adding to state:', description);
+
+      setClickedPlaces((prev) => [...prev, region]);
     };
 
-    console.log('🌍 Final description before adding to state:', description);
-
-    setClickedPlaces((prev) => [...prev, region]);
-  };
-
+  // RENDERING BLOCK
   return (
     <div className="relative h-screen w-screen">
 
