@@ -20,17 +20,6 @@ const defaultCenter = {
   lng: 8.2275,
 };
 
-const mapOptions = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  mapTypeControl: true,
-  scaleControl: true,
-  streetViewControl: true,
-  rotateControl: true,
-  fullscreenControl: true,
-  gestureHandling: 'greedy',
-  clickableIcons: false,
-};
 
 function getPolygonCenter(coordinates) {
   const lats = coordinates.map(p => p.lat);
@@ -48,6 +37,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   const isCancelledRef = useRef(false);
   const [buttonPositions, setButtonPositions] = useState([]);
   const overlayRefs = useRef([]);
+  const [mapType, setMapType] = useState('roadmap'); // default
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -250,17 +240,56 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   }, [setClickedPlaces, inputMode, sessionLocked]);
 
   return (
+      <div className="relative h-full w-full">
+          {/* Custom toggle */}
+          <div className="h-12 absolute items-center m-4 p-2 space-x-2 backdrop-blur-xs bg-white/80 shadow-lg rounded-full flex z-40">
+            {['roadmap', 'terrain', 'satellite'].map((type) => (
+              <button
+                key={type}
+                onClick={() => setMapType(type)}
+                className={`px-4 py-2 text-sm font-medium ${
+                  mapType === type ? 'bg-stone-200 text-black rounded-full' : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
+                }`}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+          </div>
+
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={defaultCenter}
         zoom={7}
+        mapTypeId={mapType}
         onLoad={(map) => {
           mapRef.current = map;
           if (handleMapLoad) handleMapLoad(map);
+
+          map.setOptions({
+            disableDefaultUI: false,
+            zoomControl: true,
+            cameraControl: true,
+            cameraControlOptions: {
+              position: window.google.maps.ControlPosition.LEFT_BOTTOM,
+            },
+            zoomControlOptions: {
+              position: window.google.maps.ControlPosition.LEFT_BOTTOM,
+            },
+            mapTypeControl: false,
+            mapTypeControlOptions: {
+              position: window.google.maps.ControlPosition.LEFT_TOP,
+            },
+            scaleControl: true,
+            streetViewControl: false,
+            rotateControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'greedy',
+            clickableIcons: false,
+          });
         }}
         onClick={memoizedHandleMapClick}
-        options={mapOptions}
       >
+
         {markers.map((place, i) => (
           <Marker 
             key={`marker-${place.timestamp || i}`} 
@@ -381,5 +410,6 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
                 );
               })}
             </GoogleMap>
+          </div>
           );
         }
