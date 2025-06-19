@@ -57,39 +57,22 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && 
-          inputMode === 'draw' && 
-          !sessionLocked && 
-          window.google?.maps?.drawing &&
-          drawingManagerRef.current && 
-          typeof drawingManagerRef.current.setDrawingMode === 'function') {
+      if (e.key === 'Escape' && inputMode === 'draw' && !sessionLocked) {
+        console.log('ESC pressed - scheduling drawing reset');
         
-        // Set the cancelled flag to abort current drawing
+        // Set the cancelled flag to abort any completion
         isCancelledRef.current = true;
         
-        // Stop current drawing mode
-        try {
-          drawingManagerRef.current.setDrawingMode(null);
-        } catch (error) {
-          console.warn('Error stopping drawing mode:', error);
-        }
-        
-        // Restart polygon drawing mode after a short delay
+        // Small delay to allow any pending operations to complete
+        // before forcing the reset
         setTimeout(() => {
-          if (inputMode === 'draw' && 
-              !sessionLocked && 
-              window.google?.maps?.drawing &&
-              drawingManagerRef.current && 
-              typeof drawingManagerRef.current.setDrawingMode === 'function') {
-            try {
-              isCancelledRef.current = false; // Reset the flag
-              drawingManagerRef.current.setDrawingMode(
-                window.google.maps.drawing.OverlayType.POLYGON
-              );
-            } catch (error) {
-              console.warn('Error restarting drawing mode:', error);
-            }
-          }
+          console.log('Executing drawing manager reset via drawKey increment');
+          setDrawKey(prev => prev + 1);
+          
+          // Reset the cancelled flag after a brief moment
+          setTimeout(() => {
+            isCancelledRef.current = false;
+          }, 50);
         }, 100);
       }
     };
@@ -100,7 +83,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
     }
     
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [drawKey, inputMode, sessionLocked]);
+  }, [inputMode, sessionLocked, setDrawKey]); // Note: removed drawKey from dependencies to avoid infinite loop
 
   useEffect(() => {
     const updateButtonPositions = () => {
