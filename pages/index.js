@@ -204,22 +204,43 @@ export default function PlaceMemoryV5() {
     };
 
   //RESUME SESSION
-  const resumeSession = (session) => {
+    const resumeSession = (session) => {
+      // Set session state
       setIntent(session.intent);
       setConversationHistory(session.conversationHistory);
       setClickedPlaces(session.clickedPlaces || []);
       setCurrentSessionId(session.id);
       setShowIntentInput(false);
       setIsSessionLocked(true); // 🔒 Lock the session when resuming
+      setExpanded(true); // Expand response tray on resume
 
-      // 🧭 Center map on first saved location (if available)
-      if (mapRef.current && session.clickedPlaces && session.clickedPlaces.length > 0) {
-        const firstPlace = session.clickedPlaces[0];
-        const latLng = firstPlace.center || { lat: firstPlace.lat, lng: firstPlace.lng };
-        if (latLng && latLng.lat && latLng.lng) {
-          mapRef.current.panTo(latLng);
-          mapRef.current.setZoom(12);
+      // Define dynamic padding for fitBounds
+      const getDynamicPadding = () => {
+        const width = window.innerWidth;
+        const trayPadding = expanded ? 300 : 100;
+
+        if (width < 640) {
+          return { top: 60, bottom: 60, left: 20, right: trayPadding };
+        } else if (width < 1024) {
+          return { top: 80, bottom: 80, left: 40, right: trayPadding };
+        } else {
+          return { top: 100, bottom: 100, left: 100, right: trayPadding };
         }
+      };
+
+      // Auto-fit map to region or places
+      if (mapRef.current && session.clickedPlaces?.length > 0) {
+        const bounds = new window.google.maps.LatLngBounds();
+
+        session.clickedPlaces.forEach((place) => {
+          if (place.type === 'region' && place.coordinates?.length) {
+            place.coordinates.forEach((coord) => bounds.extend(coord));
+          } else if (place.lat && place.lng) {
+            bounds.extend({ lat: place.lat, lng: place.lng });
+          }
+        });
+
+        mapRef.current.fitBounds(bounds, getDynamicPadding());
       }
     };
 
