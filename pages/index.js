@@ -112,7 +112,7 @@ export default function PlaceMemoryV5() {
   const mapRef = useRef(null);
   const [isSessionLocked, setIsSessionLocked] = useState(false);
   const responseScrollRef = useRef(null);
-
+  const [mapType, setMapType] = useState('roadmap');
 
   // MAP CALLBACK
   const handleMapLoad = useCallback((map) => {
@@ -760,32 +760,61 @@ const analyzePlaces = async () => {
     };
 
   // RENDERING BLOCK
+ console.log("FAB Check", {
+   conversationHistoryLength: conversationHistory.length,
+   expanded,
+ });
   return (
     <div className="relative h-screen w-screen">
+    {showIntentInput && conversationHistory.length === 0 && (
 
-      {/* TOP FIXED INPUT CONTAINER */}
-      <div className="fixed top-4 items-stretch left-1/2 -translate-x-1/2 z-50">
-        {conversationHistory.length === 0 && !loading && showIntentInput ? (
-          <div className="flex items-center space-x-8 h-12">
-            <InputMode inputMode={inputMode} setInputMode={setInputMode} />
-            <IntentInput
-              intent={intent}
-              setIntent={setIntent}
-              onAnalyze={analyzePlaces}
-            />
+      <div className="absolute top-4 inset-x-4 z-40 pointer-events-none">
+        <div className="flex justify-between items-start w-full mx-auto pointer-events-auto">
+
+          {/* MAP TYPE */}
+          <div className="flex w-auto justify-start">
+            <div className="p-2 space-x-2 backdrop-blur-xs bg-white/80 shadow-lg rounded-full w-fit z-40">
+              {['roadmap', 'terrain', 'satellite'].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setMapType(type)}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    mapType === type ? 'bg-stone-200 text-black rounded-full' : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
+                  }`}
+                >
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : conversationHistory.length > 0 ? (
-          <button
-            onClick={() => {
-              clearMemory();
-              setShowIntentInput(true);
-            }}
-            className="bg-stone-200 text-gray-700 hover:bg-black hover:text-white font-medium px-4 py-2 rounded-full shadow-lg"
-          >
-            Select a new place
-          </button>
-        ) : null}
+
+          {/* INPUT MODE*/}
+          <div className="flex w-auto justify-center">
+              <InputMode inputMode={inputMode} setInputMode={setInputMode} />
+          </div>
+
+          {/* QUESTION BOX */}
+          <div className="flex justify-stretch">
+              <IntentInput
+                intent={intent}
+                setIntent={setIntent}
+                onAnalyze={analyzePlaces}
+              />
+          </div>
+
+          {/* DISPLAY PAST SESSIONS */}
+          <div className="flex w-auto justify-end">
+            {!loading && pastSessions.length > 0 && (
+              <RecentSessions 
+                pastSessions={pastSessions} 
+                onResume={resumeSession} 
+                onDelete={handleDeleteSession}
+              />
+            )}
+          </div>
+        </div>
       </div>
+    )}
 
       {/* FULL-SCREEN MAP */}
       <div className="absolute inset-0 z-0">
@@ -801,18 +830,10 @@ const analyzePlaces = async () => {
             inputMode={inputMode}
             handleMapLoad={handleMapLoad} // pass to MapPanel
             sessionLocked={isSessionLocked}
+            mapType={mapType}
           />
         </LoadScript>
       </div>
-
-      {/* DISPLAY PAST SESSIONS */}
-      {!loading && conversationHistory.length === 0 && pastSessions.length > 0 && showIntentInput && (
-        <RecentSessions 
-          pastSessions={pastSessions} 
-          onResume={resumeSession} 
-          onDelete={handleDeleteSession}
-        />
-      )}
 
       {/* LOADING INDICATOR */}
       {loading && <LoadingBar />}
@@ -822,29 +843,44 @@ const analyzePlaces = async () => {
         <div className="fixed right-4 top-4 max-h-[calc(100vh-2rem)] w-[28rem] z-40 backdrop-blur-sm bg-white/80 shadow-xl rounded-xl flex flex-col">
 
 
-      {/* Hide button at top of tray */}
-      <button
-        onClick={() => setExpanded(false)}
-        className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 border-b border-gray-200"
-      >
-        Hide
-        <ChevronDown className="ml-2 h-4 w-4" />
-      </button>
+          {/* HIDE TRAY button */}
+          <button
+            onClick={() => setExpanded(false)}
+            className="flex items-center justify-center w-full px-4 py-2 font-medium text-gray-700 hover:bg-gray-100 border-b border-gray-200"
+          >
+            Hide
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </button>
 
-      {/* Scrollable response area */}
-      <div ref={responseScrollRef} className="overflow-y-auto p-4">
-        <ResponseCard
-          intent={intent}
-          conversationHistory={conversationHistory}
-          onFollowUp={handleFollowUp}
-          expanded={expanded}
-          setExpanded={setExpanded}
-        />
-      </div>
-    </div>
-          )}
+          {/* Scrollable response area */}
+          <div ref={responseScrollRef} className="overflow-y-auto p-4">
+            <ResponseCard
+              intent={intent}
+              conversationHistory={conversationHistory}
+              onFollowUp={handleFollowUp}
+              expanded={expanded}
+              setExpanded={setExpanded}
+            />
+          </div>
+        </div>
+              )}
 
-      {/* FLOATING SHOW BUTTON (when tray is hidden) */}
+      {/* FAB stays visible */}
+      {conversationHistory.length > 0 && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-40 flex justify-center w-full max-w-md">
+          <div className="shadow-lg">
+            <FAB
+              onClick={() => {
+                clearMemory();
+                setShowIntentInput(true);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+
+      {/* EXPAND BUTTON (when Response Tray is hidden) */}
       {conversationHistory.length > 0 && !expanded && (
         <button
           onClick={() => setExpanded(true)}

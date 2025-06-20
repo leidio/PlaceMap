@@ -30,14 +30,13 @@ function getPolygonCenter(coordinates) {
   };
 }
 
-export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode, handleMapLoad, sessionLocked }) {
+export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode, mapType, handleMapLoad, sessionLocked }) {
   const mapRef = useRef(null);
   const drawingManagerRef = useRef(null);
   const [drawKey, setDrawKey] = useState(0);
   const isCancelledRef = useRef(false);
   const [buttonPositions, setButtonPositions] = useState([]);
   const overlayRefs = useRef([]);
-  const [mapType, setMapType] = useState('roadmap'); // default
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -224,20 +223,6 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
 
   return (
       <div className="relative h-full w-full">
-          {/* Custom toggle */}
-          <div className="h-12 absolute items-center m-4 p-2 space-x-2 backdrop-blur-xs bg-white/80 shadow-lg rounded-full flex z-40">
-            {['roadmap', 'terrain', 'satellite'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setMapType(type)}
-                className={`px-4 py-2 text-sm font-medium ${
-                  mapType === type ? 'bg-stone-200 text-black rounded-full' : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
-                }`}
-              >
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            ))}
-          </div>
 
       <GoogleMap
         mapContainerStyle={mapContainerStyle}

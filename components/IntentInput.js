@@ -16,7 +16,7 @@ export default function IntentInput({ intent, setIntent, onAnalyze }) {
         value={intent}
         onChange={(e) => setIntent(e.target.value)}
         placeholder="What do you want to know?"
-        className="bg-transparent focus:outline-none w-full text-gray-900 placeholder-gray-400"
+        className="bg-transparent focus:outline-none font-medium w-full text-gray-900 placeholder-gray-400"
       />
       <button
         type="submit"
