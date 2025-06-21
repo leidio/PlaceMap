@@ -57,7 +57,7 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
         />
         <button
           type="submit"
-          className="h-10 w-10 flex items-center justify-center bg-stone-200 text-black hover:bg-black hover:text-white rounded-lg"
+          className="h-10 w-10 flex items-center justify-center bg-civicGreen text-black hover:bg-black hover:text-white rounded-lg"
         >
           <BiUpArrowAlt className="text-current" size={20} />
         </button>

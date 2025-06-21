@@ -797,9 +797,9 @@ const analyzePlaces = async () => {
               <button
                 key={type}
                 onClick={() => setMapType(type)}
-                className={`px-4 py-2 text-sm font-medium ${
+                className={`px-4 py-2 text-sm font-medium h-full ${
                   mapType === type
-                    ? 'bg-stone-200 text-black rounded-full'
+                    ? 'bg-civicGreen text-black rounded-full'
                     : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
                 }`}
               >

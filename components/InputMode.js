@@ -7,7 +7,7 @@ export default function InputMode({ inputMode, setInputMode }) {
     <div className="flex items-center space-x-2 py-2 px-2 backdrop-blur-sm bg-white/80 shadow-lg rounded-full">
           <button
             className={`flex items-center gap-2 px-4 rounded-full h-full hover:bg-black hover:text-white ${
-              inputMode === "click" ? "bg-stone-200 text-black" : "text-gray-700"
+              inputMode === "click" ? "bg-civicGreen text-black" : "text-gray-700"
             }`}
             onClick={() => setInputMode("click")}
           >
@@ -16,13 +16,13 @@ export default function InputMode({ inputMode, setInputMode }) {
           </button>
           <button
             className={`flex items-center gap-2 px-4 py-2 rounded-full h-full hover:bg-black hover:text-white ${
-              inputMode === "draw" ? "bg-stone-200 text-black" : "text-gray-700"
+              inputMode === "draw" ? "bg-civicGreen text-black" : "text-gray-700"
             }`}
             onClick={() => setInputMode("draw")}
           >
             <BiPen size={16} />
             Draw
           </button>
-        </div>
+    </div>
   );
 }

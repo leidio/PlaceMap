@@ -11,6 +11,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        civicGreen: '#43FFB7',
         civicBlue: '#1e3a8a',
         civicGray: '#f5f6f8',
         civicText: '#1f2937',
