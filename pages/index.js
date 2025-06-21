@@ -11,8 +11,9 @@ import RecentSessions from '../components/RecentSessions';
 import { BiMap, BiPen, BiUpArrowAlt } from 'react-icons/bi';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import InputMode from '../components/InputMode';
+import LocationSearchBar from '../components/LocationSearchBar';
 
-const googleMapsLibraries = ['drawing', 'geometry'];
+const googleMapsLibraries = ['drawing', 'geometry', 'places'];
 
 //MAP CONTAINER
     const mapContainerStyle = {
@@ -114,80 +115,120 @@ export default function PlaceMemoryV5() {
   const responseScrollRef = useRef(null);
   const [mapType, setMapType] = useState('roadmap');
 
-  // MAP CALLBACK
-  const handleMapLoad = useCallback((map) => {
-      mapRef.current = map;
-    }, []);
-
-  // RESPONSE OR NOT?
-  const responseActive = conversationHistory.length > 0;
-
-  // LOAD SESSIONS from localStorage on component mount
-  useEffect(() => {
-      const savedSessions = localStorage.getItem('pastSessions');
-      if (savedSessions) {
-        try {
-          setPastSessions(JSON.parse(savedSessions));
-        } catch (error) {
-          console.error('Error loading sessions:', error);
+  //LOCATION SEARCH
+      const handleSearch = (query) => {
+        if (
+          !mapRef.current ||
+          !window.google ||
+          !window.google.maps ||
+          !window.google.maps.places
+        ) {
+          console.warn("Google Maps Places API not loaded yet.");
+          return;
         }
-      }
-    }, []);
 
-  // AUTO-SCROLL to the bottom whenever a new message is added
-  useEffect(() => {
-      if (responseScrollRef.current) {
-        responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
-      }
-    }, [conversationHistory]);
+        const service = new window.google.maps.places.PlacesService(mapRef.current);
 
-  // SAVE SESSIONS to localStorage whenever pastSessions changes
-  useEffect(() => {
-      localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
-    }, [pastSessions]);
+        const request = {
+          query,
+          fields: ["name", "geometry", "formatted_address"],
+        };
 
-  // CREATE OR UPDATE SESSION
-  const createOrUpdateSession = () => {
-      if (!intent || conversationHistory.length === 0) return;
+        service.textSearch(request, (results, status) => {
+          if (
+            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            results &&
+            results.length > 0
+          ) {
+            const place = results[0];
+            const location = place.geometry.location;
 
-      const sessionData = {
-        id: currentSessionId || generateSessionId(),
-        intent,
-        conversationHistory: [...conversationHistory],
-        clickedPlaces: [...clickedPlaces],
-        timestamp: Date.now()
+            // Center the map
+            mapRef.current.setCenter(location);
+            mapRef.current.setZoom(13);
+
+            // Optional: Add to your app state
+            setClickedPlaces((prev) => [...prev]);
+          } else {
+            console.error("No results found or search failed:", status);
+          }
+        });
       };
 
-      setPastSessions(prev => {
-        // Check if we're updating an existing session
-        if (currentSessionId) {
-          const existingIndex = prev.findIndex(s => s.id === currentSessionId);
-          if (existingIndex !== -1) {
-            // Update existing session
-            const updated = [...prev];
-            updated[existingIndex] = sessionData;
-            return updated;
-          }
-        }
-        
-        // Create new session (avoid duplicates)
-        const isDuplicate = prev.some(s => 
-          s.intent === sessionData.intent &&
-          JSON.stringify(s.conversationHistory) === JSON.stringify(sessionData.conversationHistory)
-        );
-        
-        if (!isDuplicate) {
-          return [...prev, sessionData];
-        }
-        
-        return prev;
-      });
+  // MAP CALLBACK
+      const handleMapLoad = useCallback((map) => {
+          mapRef.current = map;
+        }, []);
 
-      // Set current session ID if it's a new session
-      if (!currentSessionId) {
-        setCurrentSessionId(sessionData.id);
-      }
-    };
+  // RESPONSE OR NOT?
+      const responseActive = conversationHistory.length > 0;
+
+  // LOAD SESSIONS from localStorage on component mount
+      useEffect(() => {
+          const savedSessions = localStorage.getItem('pastSessions');
+          if (savedSessions) {
+            try {
+              setPastSessions(JSON.parse(savedSessions));
+            } catch (error) {
+              console.error('Error loading sessions:', error);
+            }
+          }
+        }, []);
+
+  // AUTO-SCROLL to the bottom whenever a new message is added
+      useEffect(() => {
+          if (responseScrollRef.current) {
+            responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
+          }
+        }, [conversationHistory]);
+
+  // SAVE SESSIONS to localStorage whenever pastSessions changes
+      useEffect(() => {
+          localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
+        }, [pastSessions]);
+
+  // CREATE OR UPDATE SESSION
+      const createOrUpdateSession = () => {
+          if (!intent || conversationHistory.length === 0) return;
+
+          const sessionData = {
+            id: currentSessionId || generateSessionId(),
+            intent,
+            conversationHistory: [...conversationHistory],
+            clickedPlaces: [...clickedPlaces],
+            timestamp: Date.now()
+          };
+
+          setPastSessions(prev => {
+            // Check if we're updating an existing session
+            if (currentSessionId) {
+              const existingIndex = prev.findIndex(s => s.id === currentSessionId);
+              if (existingIndex !== -1) {
+                // Update existing session
+                const updated = [...prev];
+                updated[existingIndex] = sessionData;
+                return updated;
+              }
+            }
+            
+            // Create new session (avoid duplicates)
+            const isDuplicate = prev.some(s => 
+              s.intent === sessionData.intent &&
+              JSON.stringify(s.conversationHistory) === JSON.stringify(sessionData.conversationHistory)
+            );
+            
+            if (!isDuplicate) {
+              return [...prev, sessionData];
+            }
+            
+            return prev;
+          });
+
+          // Set current session ID if it's a new session
+          if (!currentSessionId) {
+            setCurrentSessionId(sessionData.id);
+          }
+        };
 
   //CLEAR MEMORY
   const clearMemory = () => {
@@ -814,19 +855,23 @@ const analyzePlaces = async () => {
              <InputMode inputMode={inputMode} setInputMode={setInputMode} />
            </div>
          )}
-         </div>
+        </div>
+
+
+        <LocationSearchBar onSearch={(query) => handleSearch(query)} />
 
         {/* SESSIONS (only shown if available) */}
         {!loading && !isSessionLocked && pastSessions.length > 0 && (
-          <div className="pointer-events-auto">
+        <div className="pointer-events-auto">
             <RecentSessions
               pastSessions={pastSessions}
               onResume={resumeSession}
               onDelete={handleDeleteSession}
-            />
+            />  
           </div>
         )}
       </div>
+      //END OF TOP CONTAINER
 
       {/* BOTTOM CENTER: Intent Input */}
       {showIntentInput && !isSessionLocked && conversationHistory.length === 0 && (

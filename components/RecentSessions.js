@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BiTrash } from "react-icons/bi";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { BiMenu } from "react-icons/bi";
 
 export default function RecentSessions({ pastSessions, onResume, onDelete }) {
   const [expanded, setExpanded] = useState(false);
@@ -58,14 +59,14 @@ export default function RecentSessions({ pastSessions, onResume, onDelete }) {
         </div>
       ) : (
       <div className="backdrop-blur-sm bg-white/80 shadow-lg rounded-lg z-30 w-full max-w-xs">
-        <div className="flex justify-between items-center space-x-2 px-4 pt-4 pb-2">
-            <h4 className="font-medium text-sm pb-2 text-gray-800">Recent Sessions</h4>
+        <div className="flex justify-between items-center px-2 py-2">
+            <h4 className="font-medium text-sm pb-2 text-gray-800">&nbsp;</h4>
             <button
               onClick={() => setExpanded(true)}
               className="text-gray-400 hover:text-gray-600"
               title="Expand"
             >
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+              <BiMenu className="w-6 h-6 text-black hover:text-gray-400" />
             </button>
         </div>
       </div>  
