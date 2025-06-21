@@ -787,55 +787,57 @@ const analyzePlaces = async () => {
  });
   return (
     <div className="relative h-screen w-screen">
-    {showIntentInput && conversationHistory.length === 0 && (
+    {/* TOP BAR: Map Type + Input Mode on left, Sessions on right */}
+      <div className="absolute top-4 inset-x-4 z-40 flex justify-between items-start pointer-events-none">
+        <div className="flex gap-4 pointer-events-auto">
 
-      <div className="absolute top-4 inset-x-4 z-40 pointer-events-none">
-        <div className="flex justify-between items-start w-full mx-auto pointer-events-auto">
-
-          {/* MAP TYPE */}
-          <div className="flex w-auto justify-start">
-            <div className="p-2 space-x-2 backdrop-blur-xs bg-white/80 shadow-lg rounded-full w-fit z-40">
-              {['roadmap', 'terrain', 'satellite'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setMapType(type)}
-                  className={`px-4 py-2 text-sm font-medium ${
-                    mapType === type ? 'bg-stone-200 text-black rounded-full' : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
-                  }`}
-                >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
-            </div>
+          {/* MAP TYPE (always visible) */}
+          <div className="p-2 space-x-2 backdrop-blur-xs bg-white/80 shadow-lg rounded-full w-fit">
+            {['roadmap', 'terrain', 'satellite'].map((type) => (
+              <button
+                key={type}
+                onClick={() => setMapType(type)}
+                className={`px-4 py-2 text-sm font-medium ${
+                  mapType === type
+                    ? 'bg-stone-200 text-black rounded-full'
+                    : 'text-gray-700 hover:bg-black hover:text-white hover:rounded-full'
+                }`}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
           </div>
 
-          {/* INPUT MODE*/}
-          <div className="flex w-auto justify-center">
-              <InputMode inputMode={inputMode} setInputMode={setInputMode} />
-          </div>
+         {/* INPUT MODE (only when not locked) */}
+         {!isSessionLocked && (
+           <div className="flex">
+             <InputMode inputMode={inputMode} setInputMode={setInputMode} />
+           </div>
+         )}
+         </div>
 
-          {/* QUESTION BOX */}
-          <div className="flex justify-stretch">
-              <IntentInput
-                intent={intent}
-                setIntent={setIntent}
-                onAnalyze={analyzePlaces}
-              />
+        {/* SESSIONS (only shown if available) */}
+        {!loading && !isSessionLocked && pastSessions.length > 0 && (
+          <div className="pointer-events-auto">
+            <RecentSessions
+              pastSessions={pastSessions}
+              onResume={resumeSession}
+              onDelete={handleDeleteSession}
+            />
           </div>
-
-          {/* DISPLAY PAST SESSIONS */}
-          <div className="flex w-auto justify-end">
-            {!loading && pastSessions.length > 0 && (
-              <RecentSessions 
-                pastSessions={pastSessions} 
-                onResume={resumeSession} 
-                onDelete={handleDeleteSession}
-              />
-            )}
-          </div>
-        </div>
+        )}
       </div>
-    )}
+
+      {/* BOTTOM CENTER: Intent Input */}
+      {showIntentInput && !isSessionLocked && conversationHistory.length === 0 && (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 w-[90%] sm:w-[36rem] pointer-events-auto">
+          <IntentInput
+            intent={intent}
+            setIntent={setIntent}
+            onAnalyze={analyzePlaces}
+          />
+        </div>
+      )}
 
       {/* FULL-SCREEN MAP */}
       <div className="absolute inset-0 z-0">
