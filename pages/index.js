@@ -857,8 +857,9 @@ const analyzePlaces = async () => {
          )}
         </div>
 
-
-        <LocationSearchBar onSearch={(query) => handleSearch(query)} />
+        {!isSessionLocked && (
+        <LocationSearchBar onSearch={handleSearch} />
+        )}
 
         {/* SESSIONS (only shown if available) */}
         {!loading && !isSessionLocked && pastSessions.length > 0 && (
