@@ -114,6 +114,7 @@ export default function PlaceMemoryV5() {
   const [isSessionLocked, setIsSessionLocked] = useState(false);
   const responseScrollRef = useRef(null);
   const [mapType, setMapType] = useState('roadmap');
+  const [followUpType, setFollowUpType] = useState(null);
 
   //LOCATION SEARCH
       const handleSearch = (query) => {
@@ -537,6 +538,65 @@ export default function PlaceMemoryV5() {
       };
     }
 
+//SUMMARIZE HISTORY
+function summarizeHistory(conversationHistory) {
+      if (!conversationHistory || conversationHistory.length < 2) return "";
+
+      const recentTurns = conversationHistory.slice(-4); // last 2–4 entries
+      const userInputs = recentTurns.filter(turn => turn.role === 'user').map(turn => turn.content);
+      const gptReplies = recentTurns.filter(turn => turn.role === 'assistant').map(turn => turn.content);
+
+      const themes = [];
+      const themeKeywords = {
+        civic: ['library', 'city hall', 'community center', 'plaza', 'memorial'],
+        natural: ['park', 'river', 'trail', 'green', 'nature'],
+        industrial: ['factory', 'warehouse', 'rail', 'dock', 'mill'],
+        speculative: ['what if', 'could', 'imagine', 'vision', 'dream'],
+        reflective: ['why', 'meaning', 'significance', 'history']
+      };
+
+      [...userInputs, ...gptReplies].forEach(text => {
+        const lowered = text.toLowerCase();
+        Object.entries(themeKeywords).forEach(([theme, keywords]) => {
+          if (keywords.some(keyword => lowered.includes(keyword))) {
+            if (!themes.includes(theme)) themes.push(theme);
+          }
+        });
+      });
+
+      if (themes.length > 0) {
+        return `Previously, the user explored themes of ${themes.join(', ')}.`;
+      } else {
+        return "The conversation has involved several evolving ideas and locations.";
+      }
+    }
+
+//INFER CLUSTER QUALITIES
+function inferClusterType(cluster) {
+      let waterCount = 0;
+      let urbanCount = 0;
+      let elevationAvg = 0;
+
+      cluster.forEach(p => {
+        const lowerDesc = p.description?.toLowerCase() || '';
+        if (lowerDesc.includes('river') || lowerDesc.includes('lake') || lowerDesc.includes('beach')) {
+          waterCount++;
+        }
+        if (lowerDesc.includes('town') || lowerDesc.includes('city') || lowerDesc.includes('industrial')) {
+          urbanCount++;
+        }
+        elevationAvg += p.elevation || 0;
+      });
+
+      elevationAvg = elevationAvg / cluster.length;
+
+      if (waterCount / cluster.length > 0.5) return 'coastal or riparian';
+      if (urbanCount / cluster.length > 0.5) return 'urban or peri-urban';
+      if (elevationAvg > 800) return 'mountainous';
+      if (elevationAvg < 150) return 'lowland';
+      return 'inland mixed terrain';
+    }
+
 //ANALYZE FUNCTIONS
 const analyzePlaces = async () => {
     setLoading(true);  // show loading state
@@ -603,7 +663,8 @@ const analyzePlaces = async () => {
     // Cluster summary
     const clusterSummary = clusters.map((group, i) => {
       const names = group.map((p) => p.description).join(', ');
-      return `Cluster ${i + 1}: ${names}`;
+      const inferredType = inferClusterType(group);
+      return `Cluster ${i + 1} (${inferredType}): ${names}`;
     }).join('\n');
 
     // Terrain distribution
@@ -655,13 +716,47 @@ const analyzePlaces = async () => {
       }
     }
 
-    // Optional reverse geocode center
+    // REVERSE GEOCODE CENTER
     let centerDescription = 'Unknown center point';
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-      const centerRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`);
-      const centerData = await centerRes.json();
-      centerDescription = centerData.results[0]?.formatted_address || 'Unknown area';
+        try {
+          const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+          const centerRes = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${centerLat},${centerLng}&key=${apiKey}`
+          );
+          const centerData = await centerRes.json();
+
+          // Dynamically prioritize name type based on polygon scale
+          let priorityTypes;
+          if (maxDist < 2) {
+            priorityTypes = ['street_address', 'premise', 'subpremise', 'route'];
+          } else if (maxDist < 15) {
+            priorityTypes = ['neighborhood', 'sublocality', 'locality'];
+          } else {
+            priorityTypes = ['locality', 'administrative_area_level_1', 'country'];
+          }
+
+          const components = centerData.results.flatMap(result => result.address_components);
+
+          const getComponent = (type) =>
+            components.find(comp => comp.types.includes(type))?.long_name;
+
+          for (const type of priorityTypes) {
+            const match = getComponent(type);
+            if (match) {
+              // Try to include a broader context if available
+              const country = getComponent('country');
+              centerDescription = country && country !== match
+                ? `${match}, ${country}`
+                : match;
+              break;
+            }
+          }
+
+      // Fallback to raw formatted address if no good match
+      if (centerDescription === 'Unknown center point') {
+        centerDescription = centerData.results[0]?.formatted_address || 'Unknown area';
+      }
+
     } catch (error) {
       console.warn('Failed to fetch center location name:', error);
     }
@@ -669,7 +764,11 @@ const analyzePlaces = async () => {
     const coverageSummary = `The selected area spans ~${Math.round(maxDist)} km, centered near ${centerDescription}.`;
 
   //GPT PROMPT
+  const reflection = summarizeHistory(conversationHistory);
+
   const prompt = `
+      ${reflection}
+
       The user is exploring places on a map with the goal: "${intent}".
       Here are the selected places, including rough descriptions and locations:
 
@@ -677,22 +776,15 @@ const analyzePlaces = async () => {
 
       ${summaries}
 
-      Distance overview:
-      ${distSummary}
-
-      Nearest towns:
-      ${townSummary}
-
-      Terrain distribution: ${terrainSummary}
-      ${elevationSummary}
-      ${slopeSummary}
-
-      Land cover types: ${landCoverSummary}
-
-      Spatial coverage: ${coverageSummary}
-
-      Clusters of interest:
-      ${clusterSummary}
+      🧭 Geographic Intelligence Summary:
+      - Terrain: ${terrainSummary}
+      - Land cover: ${landCoverSummary}
+      - Elevation range: ${elevationSummary}
+      ${slopeSummary ? `- Average slope: ${slopeSummary}` : ''}
+      - Nearest towns: ${townSummary}
+      - Distance between sites: ${distSummary}
+      - Overall area coverage: ${coverageSummary}
+      - Spatial clusters: ${clusterSummary}
 
       Elevation range of a region:
       ${elevationLines}
@@ -734,9 +826,30 @@ const analyzePlaces = async () => {
     }
   };
 
-  //FOLLOW UP
+  //REFER BACK TO EARLIER LOCATIONS
+  function formatClustersForFollowUp(clusters) {
+  return clusters.map((group, i) => {
+    const inferredType = inferClusterType(group);
+    const names = group.map((p) => p.description).join(', ');
+    return `Cluster ${i + 1} (${inferredType}): ${names}`;
+  }).join('\n');
+}
+
+  //FOLLOW UP FUNCTION
   const handleFollowUp = async (question) => {
       setLoading(true);
+
+      const reflection = summarizeHistory(conversationHistory);
+      const numFollowUps = (conversationHistory.length - 2) / 2;
+      const shouldSummarize = numFollowUps >= 3;
+      const formattedClusters = formatClustersForFollowUp(clusterPlaces(clickedPlaces));
+      const summaryInstruction = shouldSummarize? `
+
+      Provide a brief summary of how the user's exploration has developed so far. What themes or insights are emerging across their selected places and questions?
+
+      Then respond to the latest question in light of that summary.
+      `
+        : '';
 
       // Format conversation so far with speaker labels
       const formattedHistory = conversationHistory.map((entry, idx) => {
@@ -748,11 +861,30 @@ const analyzePlaces = async () => {
       // New follow-up with classification and reflection guidance
       const newPrompt = `${question}
 
-      Interpret the type of follow-up. Is the user asking for clarification, adjusting constraints, or requesting next steps? You don't need to report the type — just use it to guide your response.
+      ${reflection}
+
+      The user previously explored the following clusters of locations:
+      ${formattedClusters}
+
+      Determine the type of follow-up. Is the user:
+      - Asking for clarification?
+      - Adjusting constraints?
+      - Requesting next steps?
+      - Introducing a new direction?
+
+      Return your answer in the following JSON format:
+
+      {
+        "followUpType": "<one of: clarification | constraint_change | next_steps | new_direction>",
+        "response": "<your full, thoughtful reply here>"
+      }
+
+      Continue the conversation naturally.
 
       Reflect on the full history so far. Has the user's objective evolved or become clearer? Adjust your response accordingly.
-
-      Continue the conversation naturally.`;
+      
+      ${summaryInstruction}
+      `;
 
       const fullPrompt = `${formattedHistory}\n\n${newPrompt}`;
 
@@ -765,11 +897,18 @@ const analyzePlaces = async () => {
 
         const data = await res.json();
 
-        // Append new question and GPT response to conversation history
-        const updatedHistory = [...conversationHistory, question, data.result];
-        setConversationHistory(updatedHistory);
+        let parsed;
+        try {
+          parsed = JSON.parse(data.result); // Parse GPT's JSON response
+        } catch (e) {
+          console.warn("Could not parse GPT response as JSON:", data.result);
+          parsed = { followUpType: 'unknown', response: data.result };
+        }
 
-        // Update session with new conversation
+        const updatedHistory = [...conversationHistory, question, parsed.response];
+        setConversationHistory(updatedHistory);
+        setFollowUpType(parsed.followUpType); // Optional: track or log this
+
         setTimeout(() => createOrUpdateSession(), 100);
 
       } catch (error) {
@@ -857,7 +996,7 @@ const analyzePlaces = async () => {
          )}
         </div>
 
-        {!isSessionLocked && (
+        {!isSessionLocked && !expanded && (
         <LocationSearchBar onSearch={handleSearch} />
         )}
 
