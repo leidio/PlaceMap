@@ -111,50 +111,85 @@ export default function PlaceMemoryV5() {
   const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session
   const [expanded, setExpanded] = useState(true);
   const mapRef = useRef(null);
+  const isSearchingRef = useRef(false);
   const [isSessionLocked, setIsSessionLocked] = useState(false);
   const responseScrollRef = useRef(null);
   const [mapType, setMapType] = useState('roadmap');
   const [followUpType, setFollowUpType] = useState(null);
+  const [searchMarker, setSearchMarker] = useState(null);
+  const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
 
   //LOCATION SEARCH
-      const handleSearch = (query) => {
-        if (
-          !mapRef.current ||
-          !window.google ||
-          !window.google.maps ||
-          !window.google.maps.places
-        ) {
-          console.warn("Google Maps Places API not loaded yet.");
-          return;
+  const handleSearch = (query) => {
+    // Prevent duplicate calls
+    if (isSearchingRef.current) {
+      console.log('🚫 Search already in progress, ignoring duplicate call');
+      return;
+    }
+    
+    if (
+      !mapRef.current ||
+      !window.google ||
+      !window.google.maps ||
+      !window.google.maps.places
+    ) {
+      console.warn("Google Maps Places API not loaded yet.");
+      return;
+    }
+    
+    isSearchingRef.current = true;
+    
+    const service = new window.google.maps.places.PlacesService(mapRef.current);
+    const request = {
+      query,
+      fields: ["name", "geometry", "formatted_address"],
+    };
+    
+    service.textSearch(request, (results, status) => {
+      isSearchingRef.current = false;
+      
+      if (
+        status === window.google.maps.places.PlacesServiceStatus.OK &&
+        results &&
+        results.length > 0
+      ) {
+        const place = results[0];
+        const location = place.geometry.location;
+        
+        // Center the map
+        mapRef.current.setCenter(location);
+        mapRef.current.setZoom(13);
+        
+        // Clear any existing search markers from the map directly
+        if (mapRef.current._searchMarker) {
+          console.log('🧹 Removing existing search marker from map');
+          mapRef.current._searchMarker.setMap(null);
+          delete mapRef.current._searchMarker;
         }
-
-        const service = new window.google.maps.places.PlacesService(mapRef.current);
-
-        const request = {
-          query,
-          fields: ["name", "geometry", "formatted_address"],
-        };
-
-        service.textSearch(request, (results, status) => {
-          if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
-            results &&
-            results.length > 0
-          ) {
-            const place = results[0];
-            const location = place.geometry.location;
-
-            // Center the map
-            mapRef.current.setCenter(location);
-            mapRef.current.setZoom(13);
-
-            // Optional: Add to your app state
-            setClickedPlaces((prev) => [...prev]);
-          } else {
-            console.error("No results found or search failed:", status);
-          }
+        
+        // Create a new temporary marker
+        const marker = new window.google.maps.Marker({
+          position: location,
+          map: mapRef.current,
+          icon: {
+            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scaledSize: new window.google.maps.Size(32, 32)
+          },
+          title: 'Search Result'
         });
-      };
+        
+        // Store marker directly on the map object (bypass React state)
+        mapRef.current._searchMarker = marker;
+        console.log('🔍 Created and stored search marker on map:', marker);
+        console.log('🔍 Marker map after creation:', marker.getMap());
+        
+        // Optional: you can keep this or delete if it's a no-op
+        setClickedPlaces((prev) => [...prev]);
+      } else {
+        console.error("No results found or search failed:", status);
+      }
+    });
+  };
 
   // MAP CALLBACK
       const handleMapLoad = useCallback((map) => {
@@ -163,6 +198,34 @@ export default function PlaceMemoryV5() {
 
   // RESPONSE OR NOT?
       const responseActive = conversationHistory.length > 0;
+
+  // Clear search marker when user starts adding places - NUCLEAR OPTION
+  useEffect(() => {
+    if (mapRef.current?._searchMarker && clickedPlaces.length > 0) {
+      console.log('🗑️ User started adding places, FORCE removing all search markers');
+      
+      // Try multiple removal methods
+      const marker = mapRef.current._searchMarker;
+      
+      // Method 1: Standard removal
+      marker.setMap(null);
+      marker.setVisible(false);
+      
+      // Method 2: Force map refresh by triggering a re-render
+      const currentZoom = mapRef.current.getZoom();
+      mapRef.current.setZoom(currentZoom + 0.01);
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.setZoom(currentZoom);
+        }
+      }, 50);
+      
+      // Method 3: Clean up the reference
+      delete mapRef.current._searchMarker;
+      
+      console.log('✅ Applied nuclear marker removal');
+    }
+  }, [clickedPlaces.length]);
 
   // LOAD SESSIONS from localStorage on component mount
       useEffect(() => {
@@ -236,6 +299,12 @@ export default function PlaceMemoryV5() {
       // Save current session before clearing
       createOrUpdateSession();
 
+      // Clear search marker if it exists
+      if (searchMarker) {
+        searchMarker.setMap(null);
+        setSearchMarker(null);
+      }
+
       // Reset all state including session lock
       setClickedPlaces([]);
       setResponse('');
@@ -253,6 +322,7 @@ export default function PlaceMemoryV5() {
       setClickedPlaces(session.clickedPlaces || []);
       setCurrentSessionId(session.id);
       setShowIntentInput(false);
+      setHasSubmittedIntent(true);
       setIsSessionLocked(true); // 🔒 Lock the session when resuming
       setExpanded(true); // Expand response tray on resume
 
@@ -307,34 +377,80 @@ export default function PlaceMemoryV5() {
       }));
     };
 
-  //PLACEMARKERS
+  //CLICK MODE
   const handleMapClick = async (e) => {
-      // Don't allow new clicks when session is locked
-      if (isSessionLocked) return;
+     console.log('🔥 handleMapClick called, inputMode:', inputMode, 'searchMarker exists:', !!searchMarker);
+     
+     // ADD STEP 2 DEBUGGING HERE - BEFORE the existing conditional
+     console.log('🔍 CURRENT searchMarker state at click:', searchMarker);
+     console.log('🔍 searchMarker exists?', !!searchMarker);
+     if (searchMarker) {
+       console.log('🔍 searchMarker map:', searchMarker.getMap());
+       console.log('🔍 searchMarker ID:', searchMarker.__gm_id || 'no ID');
+     }
+     
+     // Don't allow new clicks when session is locked
+     if (isSessionLocked) return;
 
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+     // KEEP YOUR EXISTING FORCE CLEAR - but it should now trigger if searchMarker exists
+     if (searchMarker) {
+       console.log('🚨 FORCE CLEARING SEARCH MARKER IN HANDLEMACLICK');
+       searchMarker.setMap(null);
+       setSearchMarker(null);
+     }
+     
+     // Don't allow new clicks when session is locked
+     if (isSessionLocked) return;
 
-      const geoRes = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-      );
-      const geoData = await geoRes.json();
+     // Clear any search marker to ensure only user input is considered
+     if (searchMarker) {
+       console.log('🗑️ Removing search marker in handleMapClick, marker:', searchMarker);
+       console.log('🔍 Marker map before removal:', searchMarker.getMap());
+       console.log('🔍 Marker visible before removal:', searchMarker.getVisible());
+       
+       try {
+         searchMarker.setMap(null);
+         searchMarker.setVisible(false);
+         console.log('🔍 Marker map after removal:', searchMarker.getMap());
+         console.log('🔍 Marker visible after removal:', searchMarker.getVisible());
+       } catch (error) {
+         console.warn('Error removing search marker:', error);
+       }
+       setSearchMarker(null);
+       console.log('✅ Search marker should be removed');
+     }
 
-      //NEAREST LOCATLITY AND LAT/LONG
-      let nearestTown = 'Unknown';
-      let townLat = null;
-      let townLng = null;
+     // Only process the click if we're in click mode
+     if (inputMode !== 'click') {
+       console.log('⏭️ Not in click mode, only clearing search marker');
+       return;
+     }
 
-      for (const result of geoData.results) {
-        const hasLocality = result.types.includes('locality') || result.types.includes('administrative_area_level_2');
-        if (hasLocality) {
-          nearestTown = result.formatted_address;
-          townLat = result.geometry.location.lat;
-          townLng = result.geometry.location.lng;
-          break;
-        }
-      }
+     const lat = e.latLng.lat();
+     const lng = e.latLng.lng();
+     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+     const geoRes = await fetch(
+       `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
+     );
+     const geoData = await geoRes.json();
+
+     // NEAREST LOCALITY AND LAT/LONG
+     let nearestTown = 'Unknown';
+     let townLat = null;
+     let townLng = null;
+
+     for (const result of geoData.results) {
+       const hasLocality =
+         result.types.includes('locality') ||
+         result.types.includes('administrative_area_level_2');
+       if (hasLocality) {
+         nearestTown = result.formatted_address;
+         townLat = result.geometry.location.lat;
+         townLng = result.geometry.location.lng;
+         break;
+       }
+     }
 
   //ID NEARBY FEATURES
     let nearbyFeature = 'None found';
@@ -404,9 +520,36 @@ export default function PlaceMemoryV5() {
 
   // REGION SELECT - ADAPTIVE SAMPLING - POLYGON CENTER - REVERSE GEOCODING - TIMESTAMP - SESSION LOCK
   const handleRegionSelect = async (coordinates) => {
-    // 🚫 Respect session lock
-    if (isSessionLocked) return;
-    if (!coordinates || coordinates.length === 0) return;
+        console.log('🔥 handleRegionSelect called, searchMarker exists:', !!searchMarker);
+
+        // FORCE CLEAR SEARCH MARKER IMMEDIATELY  
+        if (searchMarker) {
+          console.log('🚨 FORCE CLEARING SEARCH MARKER IN HANDLEREGIONSELECT');
+          searchMarker.setMap(null);
+          setSearchMarker(null);
+        }
+        
+        // 🚫 Respect session lock
+        if (isSessionLocked) return;
+        if (!coordinates || coordinates.length === 0) return;
+
+        // Clear any search marker to ensure only user input is considered
+        if (searchMarker) {
+          console.log('🗑️ Removing search marker in handleRegionSelect, marker:', searchMarker);
+          console.log('🔍 Marker map before removal:', searchMarker.getMap());
+          console.log('🔍 Marker visible before removal:', searchMarker.getVisible());
+          
+          try {
+            searchMarker.setMap(null);
+            searchMarker.setVisible(false);
+            console.log('🔍 Marker map after removal:', searchMarker.getMap());
+            console.log('🔍 Marker visible after removal:', searchMarker.getVisible());
+          } catch (error) {
+            console.warn('Error removing search marker:', error);
+          }
+          setSearchMarker(null);
+          console.log('✅ Search marker should be removed');
+        }
 
     // ➕ Compute center of polygon
     const lats = coordinates.map(c => c.lat);
@@ -996,7 +1139,7 @@ const analyzePlaces = async () => {
          )}
         </div>
 
-        {!isSessionLocked && !expanded && (
+        {!isSessionLocked && conversationHistory.length === 0 && !hasSubmittedIntent && (
         <LocationSearchBar onSearch={handleSearch} />
         )}
 
@@ -1036,7 +1179,7 @@ const analyzePlaces = async () => {
             handleMapClick={handleMapClick}
             onRegionSelect={onRegionSelect}
             inputMode={inputMode}
-            handleMapLoad={handleMapLoad} // pass to MapPanel
+            handleMapLoad={handleMapLoad}
             sessionLocked={isSessionLocked}
             mapType={mapType}
           />
@@ -1081,6 +1224,7 @@ const analyzePlaces = async () => {
               onClick={() => {
                 clearMemory();
                 setShowIntentInput(true);
+                setHasSubmittedIntent(false);
               }}
             />
           </div>
