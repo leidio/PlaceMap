@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BiUpArrowAlt } from 'react-icons/bi';
 
-export default function ResponseCard({ intent, conversationHistory, onFollowUp }) {
+export default function ResponseCard({ intent, conversationHistory, onFollowUp, setShowInterpretModal }) {
   const [followUp, setFollowUp] = useState('');
   const scrollRef = useRef(null);
 
@@ -34,9 +34,23 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp }
               {pair.question}
             </h3>
           )}
-          <p>{pair.answer.replace(/^\u{1f43c}\s+|^\u{1f916}\s+/u, '')}</p>
+          <p>
+            {(typeof pair === 'string'
+              ? pair
+              : pair?.answer || ''
+            ).replace(/^\u{1f43c}\s+|^\u{1f916}\s+/u, '')}
+          </p>
         </div>
       ))}
+
+      {conversationHistory.length > 0 && (
+        <button
+          onClick={() => setShowInterpretModal(true)}
+          className="text-xs text-stone-600 hover:text-blue-600 mt-4"
+        >
+          Interpretation notes
+        </button>
+      )}
 
       <form
         onSubmit={(e) => {

@@ -28,7 +28,7 @@ function getPolygonCenter(coordinates) {
   };
 }
 
-export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode, mapType, handleMapLoad, sessionLocked }) {
+export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapClick, onRegionSelect, inputMode, mapType, handleMapLoad, sessionLocked, conversationHistory }) {
   const mapRef = useRef(null);
   const drawingManagerRef = useRef(null);
   const [drawKey, setDrawKey] = useState(0);
@@ -39,6 +39,22 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
   }, []);
+
+  //MAP STYLES
+  const mapStyles = [
+  {
+    featureType: "poi.business",
+    stylers: [
+      { visibility: "off" }
+    ]
+  },
+  {
+    featureType: "transit",
+    stylers: [
+      { visibility: "off" }
+    ]
+  }
+];
 
   const memoizedHandleMapClick = useCallback((e) => {
     console.log('🎯 MapPanel received click event, inputMode:', inputMode);
@@ -198,6 +214,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
         center={defaultCenter}
         zoom={7}
         mapTypeId={mapType}
+        options={{ styles: mapStyles }}
         onLoad={(map) => {
           mapRef.current = map;
           if (handleMapLoad) handleMapLoad(map);
@@ -270,7 +287,7 @@ export default function MapPanel({ clickedPlaces, setClickedPlaces, handleMapCli
           </div>
         ))}
 
-        {!sessionLocked && buttonPositions.map((position, index) => {
+        {!sessionLocked && conversationHistory.length === 0 && buttonPositions.map((position, index) => {
           const region = regions[index];
           if (!position || !region) return null;
 
