@@ -133,9 +133,10 @@ export default function PlaceMemoryV5() {
       const [hasSubmittedIntent, setHasSubmittedIntent] = useState(false);
       const [lastPrompt, setLastPrompt] = useState(null);
       const [showInterpretModal, setShowInterpretModal] = useState(false);
+      const [selectedModel, setSelectedModel] = useState('GPT'); // or 'Claude'
 
     //LOCATION SEARCH
-    const handleSearch = (query) => {
+      const handleSearch = (query) => {
         // Prevent duplicate calls
         if (isSearchingRef.current) {
           console.log('🚫 Search already in progress, ignoring duplicate call');
@@ -255,16 +256,16 @@ export default function PlaceMemoryV5() {
         }, []);
 
     // AUTO-SCROLL to the bottom whenever a new message is added
-      useEffect(() => {
+    useEffect(() => {
             if (responseScrollRef.current) {
               responseScrollRef.current.scrollTop = responseScrollRef.current.scrollHeight;
             }
-        }, [conversationHistory]);
+    }, [conversationHistory]);
 
     // SAVE SESSIONS to localStorage whenever pastSessions changes
-        useEffect(() => {
+    useEffect(() => {
             localStorage.setItem('pastSessions', JSON.stringify(pastSessions));
-        }, [pastSessions]);
+    }, [pastSessions]);
 
     // CREATE OR UPDATE SESSION
     const createOrUpdateSession = () => {
@@ -976,7 +977,8 @@ export default function PlaceMemoryV5() {
 
               Your role is to interpret the selected places as if uncovering a pattern. 
               Don’t summarize — synthesize. 
-              What ties them together? 
+              Do not use the third person.
+              What ties the selected place together? 
               What contradictions stand out? What stories are emerging?
               Prioritize insight over description.
               You are allowed to speculate. 
@@ -996,7 +998,11 @@ export default function PlaceMemoryV5() {
               });
 
               const data = await res.json();
-              const newHistory = [intent, data.result];
+              
+              const newHistory = [
+                { role: 'user', content: intent },
+                { role: 'assistant', model: selectedModel, content: data.result }
+              ];
               setConversationHistory(newHistory);
               
               // Create/update session immediately after getting the response
@@ -1007,6 +1013,17 @@ export default function PlaceMemoryV5() {
               setResponse("Error generating response.");
             } finally {
               setLoading(false);  // hide loading state
+            }
+
+            //COMPARE TO CLAUDE
+            if (selectedModel === 'Claude') {
+              const claudeResponse = `
+            This region appears deeply shaped by both natural water flows and the imposed geometry of industrial-era canals. Based on the alignment of waterways and their straightness, it's plausible they were excavated for mid-century oil infrastructure. Their presence disrupts the surrounding ecology — carving corridors through swamp environments that were once continuous.
+
+            Would you like to explore how this landscape has responded — ecologically and culturally — to imposed extraction routes?
+              `.trim();
+
+              setConversationHistory(prev => [...prev, 'Claude Interpretation', claudeResponse]);
             }
     };
 
@@ -1019,7 +1036,7 @@ export default function PlaceMemoryV5() {
       }).join('\n');
     }
 
-    //FOLLOW UP FUNCTION
+    //HANDLER - FOLLOW UP FUNCTION
     const handleFollowUp = async (question) => {
           setLoading(true);
 
@@ -1097,7 +1114,11 @@ export default function PlaceMemoryV5() {
               parsed = { followUpType: 'unknown', response: data.result };
             }
 
-            const updatedHistory = [...conversationHistory, question, parsed.response];
+            const updatedHistory = [
+              ...conversationHistory,
+              { role: 'user', content: question },
+              { role: 'assistant', model: selectedModel, content: parsed.response }
+            ];
             setConversationHistory(updatedHistory);
             setFollowUpType(parsed.followUpType); // Optional: track or log this
 
@@ -1110,6 +1131,22 @@ export default function PlaceMemoryV5() {
             setLoading(false);
           }
     };
+
+    //HANDLER — MODEL REGENERATION
+   function handleRegenerateWithClaude(previousAnswer) {
+      const mockClaudeResponse = {
+        role: 'assistant',
+        model: 'Claude',
+        content: `
+    These places suggest a tension between historical infrastructure and environmental vulnerability. The grid-like canal layout and proximity to petrochemical infrastructure hint at mid-20th-century industrial activity. You might consider how such landscapes evolved alongside environmental risk.
+
+    Would you like to explore how the region’s economy shaped its resilience strategies?
+        `.trim()
+      };
+
+      setConversationHistory(prev => [...prev, mockClaudeResponse]);
+    }
+
 
     // REGION SELECT
     const onRegionSelect = async (coordinates) => {
@@ -1153,10 +1190,10 @@ export default function PlaceMemoryV5() {
     };
 
     // RENDERING BLOCK
-     console.log("FAB Check", {
+    console.log("FAB Check", {
        conversationHistoryLength: conversationHistory.length,
        expanded,
-     });
+    });
       
     return (
         <div className="relative h-screen w-screen">
@@ -1213,6 +1250,7 @@ export default function PlaceMemoryV5() {
                 intent={intent}
                 setIntent={setIntent}
                 onAnalyze={analyzePlaces}
+                setSelectedModel={setSelectedModel}
               />
             </div>
           )}
@@ -1263,8 +1301,10 @@ export default function PlaceMemoryV5() {
                   expanded={expanded}
                   setExpanded={setExpanded}
                   setShowInterpretModal={setShowInterpretModal}
+                  onRegenerateWithClaude={handleRegenerateWithClaude}
                 />
               </div>
+            
             </div>
                   )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BiUpArrowAlt } from 'react-icons/bi';
 
-export default function ResponseCard({ intent, conversationHistory, onFollowUp, setShowInterpretModal }) {
+export default function ResponseCard({ intent, conversationHistory, onFollowUp, setShowInterpretModal, onRegenerateWithClaude }) {
   const [followUp, setFollowUp] = useState('');
   const scrollRef = useRef(null);
 
@@ -27,21 +27,35 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp, 
     >
       <h3 className="text-base font-semibold mb-2">{intent}</h3>
 
-      {messagePairs.map((pair, i) => (
-        <div key={i} className="mt-4 border-t pt-4 whitespace-pre-line">
-          {i > 0 && (
-            <h3 className="text-base font-semibold text-gray-900 mb-1">
-              {pair.question}
-            </h3>
-          )}
-          <p>
-            {(typeof pair === 'string'
-              ? pair
-              : pair?.answer || ''
-            ).replace(/^\u{1f43c}\s+|^\u{1f916}\s+/u, '')}
-          </p>
-        </div>
-      ))}
+      {messagePairs.map((pair, i) => {
+        console.log('Pair answer:', pair.answer);
+        return (
+          <div key={i} className="mt-4 border-t pt-4 whitespace-pre-line">
+            {i > 0 && (
+              <h3 className="text-base font-semibold text-gray-900 mb-1">
+                {pair.question}
+              </h3>
+            )}
+            <p>
+              {(typeof pair.answer === 'string'
+                ? pair.answer
+                : pair.answer?.content || ''
+              ).replace(/^\u{1f43c}\s+|^\u{1f916}\s+/u, '')}
+            </p>
+
+            {pair.answer?.role === 'assistant' && pair.answer?.model === 'GPT' && (
+              <div className="flex justify-end">
+                <span
+                  className="text-xs text-blue-600 hover:underline mt-1 cursor-pointer"
+                  title="Regenerate with Claude (coming soon)"
+                >
+                  ↻ Regenerate with Claude
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {conversationHistory.length > 0 && (
         <button
