@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { BiUpArrowAlt } from 'react-icons/bi';
+import { BiRevision } from "react-icons/bi";
+import { BiBulb } from "react-icons/bi";
+
 
 export default function ResponseCard({ intent, conversationHistory, onFollowUp, setShowInterpretModal, onRegenerateWithClaude }) {
   const [followUp, setFollowUp] = useState('');
@@ -33,7 +36,9 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp, 
           <div key={i} className="mt-4 border-t pt-4 whitespace-pre-line">
             {i > 0 && (
               <h3 className="text-base font-semibold text-gray-900 mb-1">
-                {pair.question}
+                {typeof pair.question === 'string'
+                  ? pair.question
+                  : pair.question?.content || ''}
               </h3>
             )}
             <p>
@@ -44,13 +49,13 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp, 
             </p>
 
             {pair.answer?.role === 'assistant' && pair.answer?.model === 'GPT' && (
-              <div className="flex justify-end">
-                <span
-                  className="text-xs text-blue-600 hover:underline mt-1 cursor-pointer"
+              <div className="flex justify-end border-b pb-4">
+                <div
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1 cursor-pointer"
                   title="Regenerate with Claude (coming soon)"
                 >
-                  ↻ Regenerate with Claude
-                </span>
+                <BiRevision /> Regenerate with Claude
+                </div>
               </div>
             )}
           </div>
@@ -60,9 +65,9 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp, 
       {conversationHistory.length > 0 && (
         <button
           onClick={() => setShowInterpretModal(true)}
-          className="text-xs text-stone-600 hover:text-blue-600 mt-4"
+          className="flex items-center gap-1 text-xs text-stone-600 hover:text-blue-600 mt-4"
         >
-          Interpretation notes
+          <BiBulb /> Interpretation notes
         </button>
       )}
 
@@ -74,7 +79,7 @@ export default function ResponseCard({ intent, conversationHistory, onFollowUp, 
             setFollowUp('');
           }
         }}
-        className="mt-8 flex gap-2 items-center"
+        className="mt-4 flex gap-2 items-center"
       >
         <input
           type="text"

@@ -34,9 +34,9 @@ export default function RecentSessions({ pastSessions, onResume, onDelete }) {
                   }}
                 >
                   <h4 className="font-medium text-sm text-gray-800 truncate">{session.intent}</h4>
-                  {session.conversationHistory?.[1] && (
+                  {session.conversationHistory?.[1]?.content && (
                     <p className="text-xs text-gray-500 mt-1 truncate">
-                      {session.conversationHistory[1].slice(0, 100)}...
+                      {session.conversationHistory[1].content.slice(0, 100)}...
                     </p>
                   )}
                   <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
